@@ -1,0 +1,45 @@
+{
+  "name": "guild-management",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm:dev:web\" \"npm:dev:api\"",
+    "dev:web": "next dev",
+    "dev:api": "npm --prefix backend run dev",
+    "build": "next build && npm --prefix backend run build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-select": "^2.2.6",
+    "@supabase/supabase-js": "^2.49.8",
+    "clsx": "^2.1.1",
+    "concurrently": "^9.0.1",
+    "gsap": "^3.12.7",
+    "konva": "^9.3.22",
+    "lucide-react": "^0.475.0",
+    "next": "16.2.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-konva": "^19.0.3",
+    "react-toastify": "^11.0.5",
+    "socket.io-client": "^4.8.3",
+    "tailwind-merge": "^2.5.2",
+    "yarn": "^1.22.22",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.3",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
