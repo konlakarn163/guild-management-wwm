@@ -8,9 +8,11 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useLanguage } from "@/components/providers/language-provider";
 import type { GuildInfo } from "@/lib/types";
 import { AuthActions } from "@/components/public/auth-actions";
-import { LanguageToggle } from "@/components/public/language-toggle";
-import { signOut } from "@/lib/client-auth";
+import { CornerWidget } from "@/components/public/corner-widget";
+import { apiFetch } from "@/lib/api";
+import { getAccessToken, signOut } from "@/lib/client-auth";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase-browser";
+import type { UserRole } from "@/lib/types";
 
 interface HeroBannerProps {
   guildInfo: GuildInfo;
@@ -22,7 +24,9 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
   const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
   const videoRef = useRef<HTMLVideoElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
@@ -50,6 +54,8 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
       scroll: "เลื่อนลงเพื่อดูตารางกิจกรรม",
       profile: "โปรไฟล์",
       editProfile: "แก้ไขโปรไฟล์ตัวละคร",
+      dashboard: "สมาชิก",
+      admin: "แอดมิน",
       logout: "ออกจากระบบ",
       login: "เข้าสู่ระบบ",
     },
@@ -62,6 +68,8 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
       scroll: "Scroll down for the schedule",
       profile: "Profile",
       editProfile: "Edit Character Profile",
+      dashboard: "Dashboard",
+      admin: "Admin",
       logout: "Logout",
       login: "Login",
     },
@@ -192,6 +200,30 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
   }, [supabaseReady]);
 
   useEffect(() => {
+    const loadRole = async () => {
+      if (!user) {
+        setRole(null);
+        return;
+      }
+
+      try {
+        const token = await getAccessToken();
+        if (!token) {
+          setRole(null);
+          return;
+        }
+
+        const profile = await apiFetch<{ role: UserRole }>("/api/profile/me", { token });
+        setRole(profile.role);
+      } catch {
+        setRole(null);
+      }
+    };
+
+    void loadRole();
+  }, [user]);
+
+  useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
       if (!profileMenuRef.current?.contains(event.target as Node)) {
         setIsProfileOpen(false);
@@ -308,67 +340,7 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
       <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/20 to-transparent" />
       <div className="absolute inset-0 bg-linear-to-r from-black/30 via-transparent to-black/30" />
 
-      <div className="absolute right-5 top-5 z-20 flex items-center gap-2 md:right-8 md:top-8">
-        <LanguageToggle inverted />
-
-        {supabaseReady && user ? (
-          <div ref={profileMenuRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setIsProfileOpen((current) => !current)}
-              className="flex items-center gap-2 rounded-full border border-white/20 bg-black/30 px-2 py-1 backdrop-blur transition hover:bg-black/45"
-              aria-haspopup="menu"
-              aria-expanded={isProfileOpen}
-              aria-label={text.profile}
-            >
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={profileName}
-                  className="h-8 w-8 rounded-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-bold uppercase text-white">
-                  {profileName.slice(0, 1)}
-                </div>
-              )}
-            </button>
-
-            {isProfileOpen ? (
-              <div
-                role="menu"
-                className="absolute right-0 top-[calc(100%+0.5rem)] w-56 rounded-2xl border border-white/20 bg-[#040a13]/95 p-2 shadow-[0_16px_38px_rgba(0,0,0,0.60)] backdrop-blur"
-              >
-                <a
-                  href="/dashboard"
-                  role="menuitem"
-                  className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-slate-50"
-                  onClick={() => setIsProfileOpen(false)}
-                >
-                  {text.editProfile}
-                </a>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => void onLogout()}
-                  className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-300 transition hover:bg-rose-900/35"
-                >
-                  {text.logout}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : supabaseReady ? (
-          <button
-            type="button"
-            onClick={() => void onLogin()}
-            className="rounded-full border border-white/25 bg-black/35 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-white transition hover:bg-black/50"
-          >
-            {text.login}
-          </button>
-        ) : null}
-      </div>
+      <CornerWidget inverted />
 
       <div className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
         <p

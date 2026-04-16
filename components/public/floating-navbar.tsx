@@ -339,6 +339,27 @@ export function FloatingNavbar({ guildInfo, menuLinksToHome = false }: FloatingN
                   role="menu"
                   className="absolute right-0 top-[calc(100%+0.5rem)] w-56 rounded-2xl border border-slate-800 bg-[#040a13] p-2 shadow-[0_16px_38px_rgba(0,0,0,0.60)]"
                 >
+                  <div className="md:hidden">
+                    <a
+                      href="/dashboard"
+                      role="menuitem"
+                      className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-slate-50"
+                      onClick={() => setIsProfileOpen(false)}
+                    >
+                      {text.dashboard}
+                    </a>
+                    {isAdmin ? (
+                      <a
+                        href="/admin"
+                        role="menuitem"
+                        className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-slate-50"
+                        onClick={() => setIsProfileOpen(false)}
+                      >
+                        {text.admin}
+                      </a>
+                    ) : null}
+                    <hr className="my-1 border-slate-800" />
+                  </div>
                   <a
                     href="/dashboard"
                     role="menuitem"

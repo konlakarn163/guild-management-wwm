@@ -1,6 +1,7 @@
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { GuildSettingsForm } from "@/components/admin/guild-settings-form";
 import { UserManagementPanel } from "@/components/admin/user-management-panel";
+import { CornerWidget } from "@/components/public/corner-widget";
 import { FloatingNavbar } from "@/components/public/floating-navbar";
 import { apiFetch } from "@/lib/api";
 import type { GuildInfo } from "@/lib/types";
@@ -24,6 +25,7 @@ export default async function AdminPage() {
   return (
     <AuthGuard allowedRoles={["ADMIN", "SUPER_ADMIN"]}>
       <FloatingNavbar guildInfo={guildInfo} menuLinksToHome />
+      <CornerWidget showLanguage={false} hideOnScroll />
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 md:px-8 md:py-10">
         <header className="rounded-md border border-amber-100/10 bg-[#040a13]/90 px-6 py-6 shadow-[0_20px_60px_rgba(0,0,0,0.65)]">
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-200/70">Admin Control</p>
