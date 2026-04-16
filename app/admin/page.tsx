@@ -6,6 +6,8 @@ import { FloatingNavbar } from "@/components/public/floating-navbar";
 import { apiFetch } from "@/lib/api";
 import type { GuildInfo } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 async function getGuildInfo(): Promise<GuildInfo> {
   try {
     return await apiFetch<GuildInfo>("/api/public/guild");
