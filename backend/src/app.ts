@@ -16,22 +16,29 @@ import { usersRouter } from "./routes/users.route.js";
 export const app = express();
 
 const allowedOrigins = env.FRONTEND_ORIGIN.split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
+      if (!origin) return callback(null, true);
 
-      callback(new Error(`Not allowed by CORS: ${origin}`));
+      const cleanOrigin = origin.replace(/\/$/, "");
+      const isAllowed = allowedOrigins.includes(cleanOrigin);
+
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS Blocked: ${origin}`));
+      }
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
+
 app.use(helmet());
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
