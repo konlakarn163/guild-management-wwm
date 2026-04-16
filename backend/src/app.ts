@@ -1,8 +1,10 @@
+import { createServer } from "node:http";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import { env } from "./config/env.js";
+import { initSocketServer } from "./lib/socket.js";
 import { requireAuth } from "./middlewares/auth.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 import { guildSettingsRouter } from "./routes/guild-settings.route.js";
@@ -14,13 +16,14 @@ import { teamsRouter } from "./routes/teams.route.js";
 import { usersRouter } from "./routes/users.route.js";
 
 export const app = express();
+const server = createServer(app);
 
-app.use(
-  cors({
-    origin: env.FRONTEND_ORIGIN,
-    credentials: true,
-  }),
-);
+initSocketServer(server);
+
+app.use(cors({
+  origin: env.FRONTEND_ORIGIN,
+  credentials: true,
+}));
 app.use(helmet());
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
@@ -34,7 +37,6 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/public", publicRouter);
-
 app.use("/api", requireAuth);
 app.use("/api/profile", profileRouter);
 app.use("/api/users", usersRouter);
@@ -45,5 +47,11 @@ app.use("/api/guild-settings", guildSettingsRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+const PORT = process.env.PORT || 4000;
+
+server.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`Server is running on port ${PORT}`);
+});
 
 export default app;

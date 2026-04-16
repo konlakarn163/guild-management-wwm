@@ -1,7 +1,7 @@
 import { Bebas_Neue, IBM_Plex_Sans_Thai, Kalam } from "next/font/google";
 import { SiteFooter } from "@/components/public/site-footer";
 import { LanguageProvider } from "@/components/providers/language-provider";
-import { ToastContainer } from "react-toastify";
+import { ToastProvider } from "@/components/providers/toast-provider";
 import "react-toastify/dist/ReactToastify.css";
 import "./globals.css";
 import type { Metadata } from "next";
@@ -20,16 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <LanguageProvider>
           {children}
-          <ToastContainer
-            position="top-center"
-            autoClose={2800}
-            hideProgressBar={false}
-            newestOnTop
-            closeOnClick
-            pauseOnHover
-            draggable
-            theme="dark"
-          />
+          <ToastProvider />
           <SiteFooter />
         </LanguageProvider>
       </body>
