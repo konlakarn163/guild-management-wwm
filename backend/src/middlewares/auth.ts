@@ -5,6 +5,11 @@ import type { UserRole } from "../types/auth.js";
 
 export const requireAuth = async (req: Request, _res: Response, next: NextFunction) => {
   try {
+    if (req.method === "OPTIONS") {
+      next();
+      return;
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
       throw new HttpError(401, "Missing bearer token");

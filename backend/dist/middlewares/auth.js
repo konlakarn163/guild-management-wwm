@@ -2,6 +2,10 @@ import { supabaseAdmin } from "../lib/supabase.js";
 import { HttpError } from "../utils/http-error.js";
 export const requireAuth = async (req, _res, next) => {
     try {
+        if (req.method === "OPTIONS") {
+            next();
+            return;
+        }
         const authHeader = req.headers.authorization;
         if (!authHeader?.startsWith("Bearer ")) {
             throw new HttpError(401, "Missing bearer token");

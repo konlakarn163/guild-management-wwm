@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import morgan from "morgan";
+import { env } from "./config/env.js";
 import { requireAuth } from "./middlewares/auth.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 import { guildSettingsRouter } from "./routes/guild-settings.route.js";
@@ -13,14 +14,34 @@ import { usersRouter } from "./routes/users.route.js";
 
 export const app = express();
 
-app.use(cors({
-  origin: true,
+const allowedOrigins = env.FRONTEND_ORIGIN.split(",")
+  .map((origin) => origin.trim())
+  .filter((origin) => origin.length > 0);
+
+const corsOptions: cors.CorsOptions = {
+  origin(origin, callback) {
+    // Allow server-to-server calls and non-browser tools that don't send Origin.
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Not allowed by CORS"));
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
+};
 
-app.options('*', cors());
+app.use(cors(corsOptions));
+
+app.options("*", cors(corsOptions));
 
 // 3. ปิด Helmet ชั่วคราว (ถ้าผ่านแล้วค่อยกลับมาเปิด)
 // import helmet from "helmet";

@@ -1,6 +1,5 @@
 import cors from "cors";
 import express from "express";
-import helmet from "helmet";
 import morgan from "morgan";
 import { env } from "./config/env.js";
 import { requireAuth } from "./middlewares/auth.js";
@@ -13,11 +12,32 @@ import { publicRouter } from "./routes/public.route.js";
 import { teamsRouter } from "./routes/teams.route.js";
 import { usersRouter } from "./routes/users.route.js";
 export const app = express();
-app.use(cors({
-    origin: env.FRONTEND_ORIGIN,
+const allowedOrigins = env.FRONTEND_ORIGIN.split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+const corsOptions = {
+    origin(origin, callback) {
+        // Allow server-to-server calls and non-browser tools that don't send Origin.
+        if (!origin) {
+            callback(null, true);
+            return;
+        }
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
-}));
-app.use(helmet());
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204,
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+// 3. ปิด Helmet ชั่วคราว (ถ้าผ่านแล้วค่อยกลับมาเปิด)
+// import helmet from "helmet";
+// app.use(helmet());
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
 app.get("/", (_req, res) => {
