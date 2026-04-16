@@ -1,8 +1,8 @@
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { GuildSettingsForm } from "@/components/admin/guild-settings-form";
 import { UserManagementPanel } from "@/components/admin/user-management-panel";
-import { CornerWidget } from "@/components/public/corner-widget";
-import { FloatingNavbar } from "@/components/public/floating-navbar";
+import { CornerWidget } from "../../components/public/corner-widget";
+import { FloatingNavbar } from "../../components/public/floating-navbar";
 import { apiFetch } from "@/lib/api";
 import type { GuildInfo } from "@/lib/types";
 

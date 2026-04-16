@@ -1,4 +1,4 @@
-import { FloatingNavbar } from "@/components/public/floating-navbar";
+import { FloatingNavbar } from "../components/public/floating-navbar";
 import { HeroBanner } from "@/components/public/hero-banner";
 import { HomeContent } from "@/components/public/home-content";
 import { apiFetch } from "@/lib/api";
