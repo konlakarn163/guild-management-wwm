@@ -1,3 +1,4 @@
+
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -10,7 +11,13 @@ interface LanguageContextValue {
   toggleLanguage: () => void;
 }
 
-const LanguageContext = createContext<LanguageContextValue | null>(null);
+const defaultContext: LanguageContextValue = {
+  language: "th",
+  setLanguage: () => { },
+  toggleLanguage: () => { },
+};
+
+const LanguageContext = createContext<LanguageContextValue>(defaultContext);
 
 interface LanguageProviderProps {
   children: ReactNode;
@@ -23,7 +30,6 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
 
   useEffect(() => {
     const storedLanguage = window.localStorage.getItem(STORAGE_KEY);
-
     if (storedLanguage === "th" || storedLanguage === "en") {
       setLanguage(storedLanguage);
     }
@@ -52,14 +58,5 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
 
 export function useLanguage() {
   const context = useContext(LanguageContext);
-
-  if (!context) {
-    return {
-      language: "th" as Language,
-      setLanguage: () => { },
-      toggleLanguage: () => { },
-    };
-  }
-
   return context;
 }
