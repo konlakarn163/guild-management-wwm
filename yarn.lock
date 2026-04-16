@@ -993,7 +993,7 @@
     "@tailwindcss/oxide-win32-arm64-msvc" "4.2.2"
     "@tailwindcss/oxide-win32-x64-msvc" "4.2.2"
 
-"@tailwindcss/postcss@^4":
+"@tailwindcss/postcss@^4.2.2":
   version "4.2.2"
   resolved "https://registry.yarnpkg.com/@tailwindcss/postcss/-/postcss-4.2.2.tgz#56570116b136f32c135357544fec6776a6a49dfd"
   integrity sha512-n4goKQbW8RVXIbNKRB/45LzyUqN451deQK0nzIeauVEqjlI49slUlgKYJM2QyUzap/PcpnS7kzSUmPb1sCRvYQ==
@@ -3052,7 +3052,7 @@ postcss@8.4.31:
     picocolors "^1.0.0"
     source-map-js "^1.0.2"
 
-postcss@^8.5.6:
+postcss@^8.5.10, postcss@^8.5.6:
   version "8.5.10"
   resolved "https://registry.yarnpkg.com/postcss/-/postcss-8.5.10.tgz#8992d8c30acf3f12169e7c09514a12fed7e48356"
   integrity sha512-pMMHxBOZKFU6HgAZ4eyGnwXF/EvPGGqUr0MnZ5+99485wwW41kW91A4LOGxSHhgugZmSChL5AlElNdwlNgcnLQ==
