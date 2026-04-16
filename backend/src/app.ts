@@ -19,26 +19,31 @@ const allowedOrigins = env.FRONTEND_ORIGIN.split(",")
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
+// app.use(
+//   cors({
+//     origin: (origin, callback) => {
+//       if (!origin) return callback(null, true);
 
-      const cleanOrigin = origin.replace(/\/$/, "");
-      const isAllowed = allowedOrigins.includes(cleanOrigin);
+//       const cleanOrigin = origin.replace(/\/$/, "");
+//       const isAllowed = allowedOrigins.includes(cleanOrigin);
 
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS Blocked: ${origin}`));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
-
+//       if (isAllowed) {
+//         callback(null, true);
+//       } else {
+//         callback(new Error(`CORS Blocked: ${origin}`));
+//       }
+//     },
+//     credentials: true,
+//     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+//     allowedHeaders: ["Content-Type", "Authorization"],
+//   }),
+// );
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(helmet());
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
