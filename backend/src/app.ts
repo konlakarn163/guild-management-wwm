@@ -34,7 +34,6 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/public", publicRouter);
-
 app.use("/api", requireAuth);
 app.use("/api/profile", profileRouter);
 app.use("/api/users", usersRouter);
