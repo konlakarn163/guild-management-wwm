@@ -1,25 +1,16 @@
 "use client";
 
 import { useLanguage } from "@/components/providers/language-provider";
+import { useEffect, useState } from "react";
 
 const copy = {
   th: {
     tagline: "กิลด์ไทยสายจริงจัง สำหรับผู้เล่นที่ต้องการ Guild War และคอนเทนต์ทีม",
-    schedule: "ตารางกิจกรรม",
-    dashboard: "Member Dashboard",
-    admin: "Admin Panel",
-    rights: "สงวนลิขสิทธิ์",
-    timezone: "เวลาทั้งหมดเป็น ICT (UTC+7)",
     recruitLabel: "สนใจเข้าร่วมกิลด์ ติดต่อ",
     recruitCta: "Facebook ",
   },
   en: {
     tagline: "A serious Thai guild for coordinated Guild War and team content.",
-    schedule: "Activity Schedule",
-    dashboard: "Member Dashboard",
-    admin: "Admin Panel",
-    rights: "All rights reserved",
-    timezone: "All times listed in ICT (UTC+7)",
     recruitLabel: "Interested in joining? Contact",
     recruitCta: "Facebook Group",
   },
@@ -28,7 +19,17 @@ const copy = {
 const RECRUIT_LINK = "https://www.facebook.com/groups/3061563884136004/user/100005438229364/";
 
 export function SiteFooter() {
+  const [mounted, setMounted] = useState(false);
   const { language } = useLanguage();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <footer className="border-t border-white/6 bg-[#010307] min-h-[150px]" />;
+  }
+
   const t = copy[language];
 
   return (
@@ -42,9 +43,9 @@ export function SiteFooter() {
             <p className="mt-3 text-[1.9rem] leading-none text-white" style={{ fontFamily: "var(--font-script)" }}>
               MeawMeaw
             </p>
+            <p className="mt-4 text-xs text-slate-400">{t.tagline}</p>
           </div>
 
-        
           <div className="flex flex-col items-start gap-2 md:items-end">
             <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-amber-100/40">Guild ID</p>
             <p className="font-mono text-2xl font-bold tabular-nums text-slate-100">10068118</p>
@@ -67,16 +68,6 @@ export function SiteFooter() {
             <span>{t.recruitCta}</span>
           </a>
         </div>
-
-        {/* <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[11px] text-slate-600">
-            © {new Date().getFullYear()} MeawMeaw · {t.rights}
-          </p>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500/70" />
-            <span className="text-[11px] text-slate-600">Where Winds Meet</span>
-          </div>
-        </div> */}
       </div>
     </footer>
   );
