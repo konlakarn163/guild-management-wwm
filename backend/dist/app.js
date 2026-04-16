@@ -33,3 +33,4 @@ app.use("/api/map-strategies", mapStrategiesRouter);
 app.use("/api/guild-settings", guildSettingsRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
+export default app;

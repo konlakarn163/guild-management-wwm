@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/api";
 import { getAccessToken, getCurrentUser } from "@/lib/client-auth";
 import { getRealtimeSocket } from "@/lib/realtime";
 import type { BuildOption, GuildWarRegistration, UserRow } from "@/lib/types";
+import { getCurrentWeekId } from "@/lib/week-id";
 
 interface WarRegistrant {
   id: string;
@@ -37,7 +38,16 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
   const [message, setMessage] = useState<string | null>(null);
   const [isLoadingRegistration, setIsLoadingRegistration] = useState(true);
   const [isLoadingActiveUsers, setIsLoadingActiveUsers] = useState(false);
-  const weekId = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const weekId = useMemo(() => getCurrentWeekId(), []);
+  const weekRangeLabel = useMemo(() => {
+    const [yearText, monthText, dayText] = weekId.split("-");
+    const start = new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText)));
+    start.setUTCDate(start.getUTCDate() + 6);
+    const endYear = start.getUTCFullYear();
+    const endMonth = String(start.getUTCMonth() + 1).padStart(2, "0");
+    const endDay = String(start.getUTCDate()).padStart(2, "0");
+    return `${weekId} - ${endYear}-${endMonth}-${endDay}`;
+  }, [weekId]);
 
   const fetchRegistrationData = useCallback(async () => {
     const token = await getAccessToken();
@@ -245,7 +255,7 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
   };
 
   return (
-    <SectionCard title="Guild War Registration" subtitle={`Week: ${weekId}`}>
+    <SectionCard title="Guild War Registration" subtitle={`Week: ${weekRangeLabel}`}>
       {isLoadingRegistration ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">

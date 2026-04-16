@@ -49,11 +49,35 @@ export function CornerWidget({ inverted = false, showLanguage = true, hideOnScro
   const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
 
   useEffect(() => {
-    if (!hideOnScroll) return;
-    const handleScroll = () => setScrolled(window.scrollY > 100);
+    if (!hideOnScroll) {
+      setScrolled(false);
+      return;
+    }
+
+    const getScrollTop = () => {
+      return (
+        window.scrollY ||
+        window.pageYOffset ||
+        document.documentElement.scrollTop ||
+        document.body.scrollTop ||
+        0
+      );
+    };
+
+    const handleScroll = () => {
+      setScrolled(getScrollTop() > 100);
+    };
+
     handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    document.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+    window.addEventListener("resize", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      document.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleScroll);
+    };
   }, [hideOnScroll]);
 
   useEffect(() => {

@@ -11,6 +11,7 @@ import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/client-auth";
 import { getRealtimeSocket } from "@/lib/realtime";
 import type { BuildOption, GuildWarRegistration } from "@/lib/types";
+import { getCurrentWeekId } from "@/lib/week-id";
 
 interface PublicGuildResponse {
   build_options?: BuildOption[];
@@ -220,7 +221,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   const [poolMessage, setPoolMessage] = useState<string | null>(null);
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const latestPersistStateRef = useRef<TeamState>(defaultState);
-  const weekId = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const weekId = useMemo(() => getCurrentWeekId(), []);
   const teamKeys = useMemo(() => Object.keys(state.teams), [state.teams]);
   const zones = useMemo(() => ["pool", ...teamKeys], [teamKeys]);
   const normalizedSearch = search.trim().toLowerCase();

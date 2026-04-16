@@ -4,7 +4,7 @@ export const guildWarService = {
     async listRegistrations(weekId) {
         const { data, error } = await supabaseAdmin
             .from("guild_war_registrations")
-            .select("id, week_id, user_id, users(username, character_name, build)")
+            .select("id, week_id, user_id, users(username, discord_id, character_name, build)")
             .eq("week_id", weekId)
             .order("created_at", { ascending: true });
         if (error) {
@@ -13,6 +13,20 @@ export const guildWarService = {
         return data;
     },
     async register(userId, weekId) {
+        const { data: user, error: userError } = await supabaseAdmin
+            .from("users")
+            .select("status")
+            .eq("id", userId)
+            .maybeSingle();
+        if (userError) {
+            throw new HttpError(500, userError.message);
+        }
+        if (!user) {
+            throw new HttpError(404, "User not found");
+        }
+        if (user.status !== "ACTIVE") {
+            throw new HttpError(403, "Only ACTIVE users can register");
+        }
         const { data, error } = await supabaseAdmin
             .from("guild_war_registrations")
             .insert({ user_id: userId, week_id: weekId })

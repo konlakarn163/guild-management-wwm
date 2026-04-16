@@ -13,6 +13,20 @@ export const teamsService = {
         return data;
     },
     async createTeam(weekId, name) {
+        const { data: existing, error: existingError } = await supabaseAdmin
+            .from("teams")
+            .select("id, week_id, name, is_locked")
+            .eq("week_id", weekId)
+            .eq("name", name)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+        if (existingError) {
+            throw new HttpError(500, existingError.message);
+        }
+        if (existing) {
+            return existing;
+        }
         const { data, error } = await supabaseAdmin
             .from("teams")
             .insert({ week_id: weekId, name })
@@ -28,13 +42,17 @@ export const teamsService = {
         if (deleteError) {
             throw new HttpError(500, deleteError.message);
         }
-        if (userIds.length === 0) {
+        const dedupedUserIds = [...new Set(userIds)];
+        if (dedupedUserIds.length === 0) {
             return [];
         }
-        const payload = userIds.map((userId) => ({ team_id: teamId, user_id: userId }));
+        const payload = dedupedUserIds.map((userId) => ({ team_id: teamId, user_id: userId }));
         const { data, error } = await supabaseAdmin
             .from("team_members")
-            .insert(payload)
+            .upsert(payload, {
+            onConflict: "team_id,user_id",
+            ignoreDuplicates: true,
+        })
             .select("id, team_id, user_id");
         if (error) {
             throw new HttpError(400, error.message);

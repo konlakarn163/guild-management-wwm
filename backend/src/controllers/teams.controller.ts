@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../utils/async-handler.js";
+import { normalizeWeekIdToMonday } from "../utils/week-id.js";
 import { teamsService } from "../services/teams.service.js";
 
 const weekSchema = z.object({
@@ -9,13 +10,15 @@ const weekSchema = z.object({
 
 export const teamsController = {
   listTeams: asyncHandler(async (req: Request, res: Response) => {
-    const { weekId } = weekSchema.parse(req.params);
+    const { weekId: rawWeekId } = weekSchema.parse(req.params);
+    const weekId = normalizeWeekIdToMonday(rawWeekId);
     const teams = await teamsService.listTeams(weekId);
     res.json(teams);
   }),
 
   createTeam: asyncHandler(async (req: Request, res: Response) => {
-    const { weekId } = weekSchema.parse(req.params);
+    const { weekId: rawWeekId } = weekSchema.parse(req.params);
+    const weekId = normalizeWeekIdToMonday(rawWeekId);
     const payload = z.object({ name: z.string().min(1).max(64) }).parse(req.body);
     const team = await teamsService.createTeam(weekId, payload.name);
     res.status(201).json(team);

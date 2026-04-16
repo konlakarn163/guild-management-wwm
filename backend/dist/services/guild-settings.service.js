@@ -1,15 +1,22 @@
 import { supabaseAdmin } from "../lib/supabase.js";
 import { HttpError } from "../utils/http-error.js";
+const ALLOWED_BUILD_COLORS = ["#d65409", "#1253e0", "#167312"];
+const DEFAULT_BUILD_COLOR = "#167312";
+const normalizeBuildColor = (value) => {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return ALLOWED_BUILD_COLORS.find((color) => color === normalized) ?? DEFAULT_BUILD_COLOR;
+};
 const DEFAULT_BUILD_OPTIONS = [
-    "Duo-Chain",
-    "Fan-Tang",
-    "Fan-Um",
-    "HEAL",
-    "Nameless",
-    "Strategic",
-    "TangDao",
-    "TANK",
-    "Um-Chain",
+    { label: "HEAL", color: "#167312" },
+    { label: "DPS", color: "#1253e0" },
+    { label: "TANK", color: "#d65409" },
+    { label: "Duo-Chain", color: "#167312" },
+    { label: "Fan-Tang", color: "#1253e0" },
+    { label: "Fan-Um", color: "#167312" },
+    { label: "Nameless", color: "#1253e0" },
+    { label: "Strategic", color: "#d65409" },
+    { label: "TangDao", color: "#1253e0" },
+    { label: "Um-Chain", color: "#167312" },
 ];
 export const guildSettingsService = {
     async getOne() {
@@ -23,7 +30,7 @@ export const guildSettingsService = {
         }
         const { data: optionsData, error: optionsError } = await supabaseAdmin
             .from("build_options")
-            .select("label, sort_order")
+            .select("label, color, sort_order")
             .order("sort_order", { ascending: true })
             .order("created_at", { ascending: true });
         if (optionsError) {
@@ -31,7 +38,12 @@ export const guildSettingsService = {
         }
         return {
             ...data,
-            build_options: optionsData?.length ? optionsData.map((item) => item.label) : DEFAULT_BUILD_OPTIONS,
+            build_options: optionsData?.length
+                ? optionsData.map((item) => ({
+                    label: item.label,
+                    color: normalizeBuildColor(item.color),
+                }))
+                : DEFAULT_BUILD_OPTIONS,
         };
     },
     async upsert(payload) {
@@ -44,9 +56,20 @@ export const guildSettingsService = {
             throw new HttpError(500, findError.message);
         }
         const sanitizedBuildOptions = (payload.build_options ?? DEFAULT_BUILD_OPTIONS)
-            .map((value) => value.trim())
-            .filter(Boolean);
-        const dedupedBuildOptions = [...new Set(sanitizedBuildOptions)];
+            .map((item) => ({
+            label: item.label.trim(),
+            color: normalizeBuildColor(item.color),
+        }))
+            .filter((item) => item.label.length > 0);
+        const seen = new Set();
+        const dedupedBuildOptions = sanitizedBuildOptions.filter((item) => {
+            const key = item.label.toLowerCase();
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
         const updatePayload = {
             name: payload.name,
             code: payload.code,
@@ -70,8 +93,9 @@ export const guildSettingsService = {
         if (deleteOptionsError) {
             throw new HttpError(500, deleteOptionsError.message);
         }
-        const optionsPayload = nextBuildOptions.map((label, index) => ({
-            label,
+        const optionsPayload = nextBuildOptions.map((item, index) => ({
+            label: item.label,
+            color: item.color,
             sort_order: index,
         }));
         const { error: insertOptionsError } = await supabaseAdmin

@@ -4,7 +4,7 @@ export const usersService = {
     async listUsers(filter) {
         let query = supabaseAdmin
             .from("users")
-            .select("id, username, discord_id, role, status, created_at")
+            .select("id, username, discord_id, role, status, character_name, build, created_at")
             .order("created_at", { ascending: false });
         if (filter.status) {
             query = query.eq("status", filter.status);

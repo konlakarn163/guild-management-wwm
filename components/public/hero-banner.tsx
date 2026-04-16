@@ -340,7 +340,7 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
       <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/20 to-transparent" />
       <div className="absolute inset-0 bg-linear-to-r from-black/30 via-transparent to-black/30" />
 
-      <CornerWidget inverted />
+      <CornerWidget inverted hideOnScroll />
 
       <div className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
         <p
