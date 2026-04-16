@@ -6,6 +6,8 @@ import "react-toastify/dist/ReactToastify.css";
 import "./globals.css";
 import type { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "MeawMeaw Guild | Where Winds Meet Thailand",
   description: "MeawMeaw Guild | Where Winds Meet Thailand - Your all-in-one platform for managing your guild's operations, strategies, and member engagement in the world of Where Winds Meet. Streamline your guild management with our intuitive dashboard, comprehensive tools, and real-time updates. Join us to elevate your guild's performance and foster a thriving community in Where Winds Meet Thailand. ",
