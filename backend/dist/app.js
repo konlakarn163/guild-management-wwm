@@ -20,6 +20,9 @@ app.use(cors({
 app.use(helmet());
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
+app.get("/", (_req, res) => {
+    res.json({ service: "guild-management-backend", status: "ok" });
+});
 app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
 });
