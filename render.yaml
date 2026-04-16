@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: guild-management-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: yarn install --frozen-lockfile && yarn build
+    startCommand: yarn start
+    healthCheckPath: /health
