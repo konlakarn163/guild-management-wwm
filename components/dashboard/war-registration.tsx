@@ -30,12 +30,12 @@ interface WarRegistrationProps {
 
 export function WarRegistration({ canManageAll = false }: WarRegistrationProps) {
   const [registered, setRegistered] = useState(false);
-  const [registrants, setRegistrants] = useState<WarRegistrant[]>([]);
+  const [_registrants, setRegistrants] = useState<WarRegistrant[]>([]);
   const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
-  const [expandedRegistrantId, setExpandedRegistrantId] = useState<string | null>(null);
+  const [_expandedRegistrantId, _setExpandedRegistrantId] = useState<string | null>(null);
   const [activeUsers, setActiveUsers] = useState<UserRow[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [_message, setMessage] = useState<string | null>(null);
   const [isLoadingRegistration, setIsLoadingRegistration] = useState(true);
   const [isLoadingActiveUsers, setIsLoadingActiveUsers] = useState(false);
   const weekId = useMemo(() => getCurrentWeekId(), []);

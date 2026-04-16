@@ -25,8 +25,8 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
+  const [_isProfileOpen, setIsProfileOpen] = useState(false);
+  const _isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
   const videoRef = useRef<HTMLVideoElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
@@ -244,7 +244,7 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
     };
   }, []);
 
-  const profileName = useMemo(() => {
+  const _profileName = useMemo(() => {
     if (!user) {
       return "";
     }
@@ -262,7 +262,7 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
     return "Member";
   }, [user]);
 
-  const avatarUrl = useMemo(() => {
+  const _avatarUrl = useMemo(() => {
     const fromAvatar = user?.user_metadata?.avatar_url;
     if (typeof fromAvatar === "string" && fromAvatar.length > 0) {
       return fromAvatar;
@@ -276,7 +276,7 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
     return null;
   }, [user]);
 
-  const onLogin = async () => {
+  const _onLogin = async () => {
     if (!supabaseReady) {
       return;
     }
@@ -290,7 +290,7 @@ export function HeroBanner({ guildInfo }: HeroBannerProps) {
     });
   };
 
-  const onLogout = async () => {
+  const _onLogout = async () => {
     await signOut();
     setIsProfileOpen(false);
   };

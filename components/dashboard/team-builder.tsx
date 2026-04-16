@@ -218,7 +218,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   const [search, setSearch] = useState("");
   const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
   const [isLoadingPool, setIsLoadingPool] = useState(true);
-  const [poolMessage, setPoolMessage] = useState<string | null>(null);
+  const [_poolMessage, setPoolMessage] = useState<string | null>(null);
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const latestPersistStateRef = useRef<TeamState>(defaultState);
   const weekId = useMemo(() => getCurrentWeekId(), []);

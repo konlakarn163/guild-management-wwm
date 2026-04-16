@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { LanguageToggle } from "@/components/public/language-toggle";
@@ -225,7 +226,7 @@ export function FloatingNavbar({ guildInfo, menuLinksToHome = false }: FloatingN
     >
       <div className="flex items-center justify-between gap-3 rounded-full border border-amber-100/12 bg-[#010308]/85 px-3 py-3 shadow-[0_16px_50px_rgba(0,0,0,0.70)] backdrop-blur-xl md:px-4">
         {menuLinksToHome ? (
-          <a href="/" className="flex min-w-0 items-center gap-3 rounded-full px-2 py-1 transition hover:bg-slate-800/80">
+          <Link href="/" className="flex min-w-0 items-center gap-3 rounded-full px-2 py-1 transition hover:bg-slate-800/80">
             <div className="relative h-10 w-10 overflow-hidden rounded-full">
               <Image src="/images/icon.jpg" alt="MeawMeaw" fill className="object-cover" sizes="40px" />
             </div>
@@ -233,7 +234,7 @@ export function FloatingNavbar({ guildInfo, menuLinksToHome = false }: FloatingN
               <p className="truncate text-sm font-bold text-slate-100">{guildInfo.name}</p>
               <p className="truncate text-[11px] uppercase tracking-[0.22em] text-slate-400">{guildInfo.code}</p>
             </div>
-          </a>
+          </Link>
         ) : (
           <div
             className="flex min-w-0 items-center gap-3 rounded-full px-2 py-1 transition hover:bg-slate-800/80"
@@ -252,12 +253,12 @@ export function FloatingNavbar({ guildInfo, menuLinksToHome = false }: FloatingN
         <div className="hidden items-center gap-2 md:flex">
           {menuLinksToHome ? (
             <>
-              <a href="/" className="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-slate-100">
+              <Link href="/" className="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-slate-100">
                 {text.home}
-              </a>
-              <a href="/dashboard" className="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-slate-100">
+              </Link>
+              <Link href="/dashboard" className="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-slate-100">
                 {text.dashboard}
-              </a>
+              </Link>
               {isAdmin ? (
                 <a href="/admin" className="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-slate-100">
                   {text.admin}

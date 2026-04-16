@@ -39,7 +39,7 @@ export function GuildSettingsForm() {
   const [settings, setSettings] = useState<GuildSettings>(defaultValues);
   const [newBuildOption, setNewBuildOption] = useState("");
   const [newBuildColor, setNewBuildColor] = useState<string>(DEFAULT_BUILD_COLOR);
-  const [message, setMessage] = useState<string | null>(null);
+  const [_message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
