@@ -5,12 +5,18 @@ import { SectionCard } from "@/components/ui/section-card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/client-auth";
-import type { UserRole, UserRow, UserStatus } from "@/lib/types";
+import type { BuildOption, UserRole, UserRow, UserStatus } from "@/lib/types";
+
+interface PublicGuildResponse {
+  build_options?: BuildOption[];
+}
 
 export function UserManagementPanel() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"ALL" | UserStatus>("ALL");
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
+  const [isLoadingBuildOptions, setIsLoadingBuildOptions] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
 
   const fetchUsers = async (nextSearch: string, nextStatus: "ALL" | UserStatus) => {
@@ -54,6 +60,33 @@ export function UserManagementPanel() {
     void run();
   }, []);
 
+  useEffect(() => {
+    const loadBuildOptions = async () => {
+      try {
+        const guildInfo = await apiFetch<PublicGuildResponse>("/api/public/guild");
+        setBuildOptions(guildInfo.build_options ?? []);
+      } catch {
+        setBuildOptions([]);
+      } finally {
+        setIsLoadingBuildOptions(false);
+      }
+    };
+
+    void loadBuildOptions();
+  }, []);
+
+  const getBuildOptionsForUser = (user: UserRow) => {
+    if (!user.build) {
+      return buildOptions;
+    }
+
+    if (buildOptions.some((option) => option.label === user.build)) {
+      return buildOptions;
+    }
+
+    return [{ label: user.build, color: "#94a3b8" }, ...buildOptions];
+  };
+
   const onRoleChange = async (id: string, role: UserRole) => {
     try {
       const token = await getAccessToken();
@@ -69,6 +102,74 @@ export function UserManagementPanel() {
       await loadUsers();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Role update failed");
+    }
+  };
+
+  const onStatusChange = async (id: string, nextStatus: UserStatus) => {
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        return;
+      }
+
+      await apiFetch(`/api/users/${id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      await loadUsers();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Status update failed");
+    }
+  };
+
+  const onUserFieldChange = (id: string, key: "character_name" | "build", value: string) => {
+    setUsers((prev) =>
+      prev.map((user) => {
+        if (user.id !== id) {
+          return user;
+        }
+
+        return {
+          ...user,
+          [key]: value,
+        };
+      }),
+    );
+  };
+
+  const onSaveCharacterData = async (user: UserRow) => {
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        return;
+      }
+
+      const characterName = user.character_name?.trim();
+      const build = user.build?.trim();
+
+      const payload: { character_name?: string; build?: string } = {};
+      if (characterName) {
+        payload.character_name = characterName;
+      }
+      if (build) {
+        payload.build = build;
+      }
+
+      if (!payload.character_name && !payload.build) {
+        setMessage("Character name or build is required to save");
+        return;
+      }
+
+      await apiFetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify(payload),
+      });
+      setMessage("Character data updated");
+      await loadUsers();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Character update failed");
     }
   };
 
@@ -103,7 +204,7 @@ export function UserManagementPanel() {
             <SelectItem value="ALL">All Status</SelectItem>
             <SelectItem value="PENDING">PENDING</SelectItem>
             <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-            <SelectItem value="REJECTED">REJECTED</SelectItem>
+            <SelectItem value="REJECTED">REJECT</SelectItem>
           </SelectContent>
         </Select>
         <button
@@ -125,6 +226,7 @@ export function UserManagementPanel() {
               <th className="py-2">Role</th>
               <th className="py-2">Status</th>
               <th className="py-2">Character</th>
+              <th className="py-2">Build</th>
               <th className="py-2">Action</th>
             </tr>
           </thead>
@@ -144,16 +246,64 @@ export function UserManagementPanel() {
                     </SelectContent>
                   </Select>
                 </td>
-                <td className="py-2 text-slate-300">{user.status}</td>
-                <td className="py-2 text-slate-300">{user.character_name ?? "-"}</td>
-                <td className="py-2">
-                  <button
-                    type="button"
-                    onClick={() => void onDelete(user.id)}
-                    className="rounded-lg border border-rose-500/40 bg-rose-900/20 px-3 py-1 text-xs text-rose-300"
+                <td className="py-2 text-slate-300">
+                  <Select value={user.status} onValueChange={(value) => void onStatusChange(user.id, value as UserStatus)}>
+                    <SelectTrigger className="h-9 w-36 rounded-md px-2 py-1">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PENDING">PENDING</SelectItem>
+                      <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                      <SelectItem value="REJECTED">REJECT</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="py-2 text-slate-300">
+                  <input
+                    className="h-9 w-44 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    value={user.character_name ?? ""}
+                    placeholder="Character name"
+                    onChange={(event) => onUserFieldChange(user.id, "character_name", event.target.value)}
+                  />
+                </td>
+                <td className="py-2 text-slate-300">
+                  <Select
+                    value={user.build || undefined}
+                    onValueChange={(value) => onUserFieldChange(user.id, "build", value)}
+                    disabled={isLoadingBuildOptions}
                   >
-                    Delete
-                  </button>
+                    <SelectTrigger className="h-9 w-44 rounded-md px-2 py-1">
+                      <SelectValue placeholder="Select build / weapon" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getBuildOptionsForUser(user).map((option, index) => (
+                        <SelectItem key={`${option.label}-${option.color}-${index}`} value={option.label}>
+                          <span className="inline-flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: option.color }} />
+                            {option.label}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="py-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void onSaveCharacterData(user)}
+                      className="rounded-lg border border-emerald-500/40 bg-emerald-900/20 px-3 py-1 text-xs text-emerald-300"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onDelete(user.id)}
+                      className="rounded-lg border border-rose-500/40 bg-rose-900/20 px-3 py-1 text-xs text-rose-300"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
