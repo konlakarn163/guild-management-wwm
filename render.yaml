@@ -3,6 +3,6 @@ services:
     name: guild-management-backend
     runtime: node
     rootDir: backend
-    buildCommand: yarn install --frozen-lockfile && yarn build
+    buildCommand: yarn install --frozen-lockfile --production=false && yarn build
     startCommand: yarn start
     healthCheckPath: /health
