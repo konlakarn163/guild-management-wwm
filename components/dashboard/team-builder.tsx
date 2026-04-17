@@ -21,6 +21,7 @@ interface TeamMemberEntry {
   key: string;
   characterName: string;
   build: string;
+  registrationIndex: number;
 }
 
 interface TeamState {
@@ -42,11 +43,18 @@ interface TeamApiRow {
   team_members?: TeamApiMember[];
 }
 
+const TEAM_NAMES = ["Team 1", "Team 2", "Reserve"] as const;
+
+const LEGACY_RESERVE_NAMES = ["Team 1 Reserve", "Team 2 Reserve"] as const;
+
+type TeamName = (typeof TEAM_NAMES)[number];
+
 const defaultState: TeamState = {
   pool: [],
   teams: {
     "Team 1": [],
     "Team 2": [],
+    Reserve: [],
   },
 };
 
@@ -57,10 +65,20 @@ interface DraggableMemberProps {
   zones: string[];
   onMove: (memberKey: string, targetZone: string) => void;
   getBuildColor: (build: string) => string;
+  displayIndex?: number;
   itemClassName?: string;
 }
 
-function DraggableMember({ member, canManage, currentZone, zones, onMove, getBuildColor, itemClassName }: DraggableMemberProps) {
+function DraggableMember({
+  member,
+  canManage,
+  currentZone,
+  zones,
+  onMove,
+  getBuildColor,
+  displayIndex,
+  itemClassName,
+}: DraggableMemberProps) {
   const moveTargets = zones.filter((zone) => zone !== currentZone);
 
   if (!canManage) {
@@ -69,7 +87,10 @@ function DraggableMember({ member, canManage, currentZone, zones, onMove, getBui
         className={`cursor-default rounded-2xl border px-3 py-2 text-sm font-semibold shadow-[0_8px_18px_rgba(2,6,23,0.35)] opacity-90 ${itemClassName ?? "border-slate-600 bg-slate-900 text-slate-100"}`}
       >
         <div className="flex items-center justify-between gap-2">
-          <span>{member.characterName}</span>
+          <span>
+            {displayIndex ? `${displayIndex}. ` : ""}
+            {member.characterName}
+          </span>
           <span className="inline-flex items-center gap-1 text-xs" style={{ color: getBuildColor(member.build) }}>
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getBuildColor(member.build) }} />
             {member.build}
@@ -86,7 +107,10 @@ function DraggableMember({ member, canManage, currentZone, zones, onMove, getBui
           className={`rounded-2xl border px-3 py-2 text-sm font-semibold shadow-[0_8px_18px_rgba(2,6,23,0.35)] ${itemClassName ?? "border-slate-600 bg-slate-900 text-slate-100"}`}
         >
           <div className="flex items-center justify-between gap-2">
-            <span>{member.characterName}</span>
+            <span>
+              {displayIndex ? `${displayIndex}. ` : ""}
+              {member.characterName}
+            </span>
             <span className="inline-flex items-center gap-1 text-xs" style={{ color: getBuildColor(member.build) }}>
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getBuildColor(member.build) }} />
               {member.build}
@@ -139,15 +163,20 @@ function DropZone({
 }) {
   const isAttackTeam = id === "Team 1";
   const isDefenseTeam = id === "Team 2";
+  const isReserveTeam = id === "Reserve";
   const zoneFrameClass = isAttackTeam
     ? "border-rose-400/45 bg-rose-950/15"
     : isDefenseTeam
       ? "border-cyan-400/45 bg-cyan-950/15"
+      : isReserveTeam
+        ? "border-amber-300/45 bg-amber-950/10"
       : "border-slate-700 bg-slate-950/70";
   const zoneEmptyClass = isAttackTeam
     ? "border-rose-400/35 text-rose-100/75"
     : isDefenseTeam
       ? "border-cyan-400/35 text-cyan-100/75"
+      : isReserveTeam
+        ? "border-amber-300/35 text-amber-100/75"
       : "border-slate-700 text-slate-400";
 
   return (
@@ -161,7 +190,7 @@ function DropZone({
       </h4>
       <div className={membersGridClassName ?? "grid gap-2"}>
         {members.length > 0 ? (
-          members.map((member) => (
+          members.map((member, index) => (
             <DraggableMember
               key={member.key}
               member={member}
@@ -170,6 +199,7 @@ function DropZone({
               zones={zones}
               onMove={onMove}
               getBuildColor={getBuildColor}
+              displayIndex={id === "pool" ? index + 1 : undefined}
               itemClassName={itemClassName}
             />
           ))
@@ -226,6 +256,10 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   const zones = useMemo(() => ["pool", ...teamKeys], [teamKeys]);
   const normalizedSearch = search.trim().toLowerCase();
 
+  const sortByRegistrationOrder = (members: TeamMemberEntry[]) => {
+    return [...members].sort((left, right) => left.registrationIndex - right.registrationIndex);
+  };
+
   const computeMovedState = (prev: TeamState, memberKey: string, targetZone: string): TeamState => {
     const movingMember =
       prev.pool.find((member) => member.key === memberKey) ||
@@ -248,7 +282,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     };
 
     if (targetZone === "pool") {
-      next.pool.push(movingMember);
+      next.pool = sortByRegistrationOrder([...next.pool, movingMember]);
     } else {
       next.teams[targetZone] = [...(next.teams[targetZone] ?? []), movingMember];
     }
@@ -261,12 +295,12 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     const mapping: Record<string, string> = {};
 
     for (const team of teams) {
-      if ((team.name === "Team 1" || team.name === "Team 2") && !mapping[team.name]) {
+      if (TEAM_NAMES.includes(team.name as TeamName) && !mapping[team.name]) {
         mapping[team.name] = team.id;
       }
     }
 
-    for (const name of ["Team 1", "Team 2"]) {
+    for (const name of TEAM_NAMES) {
       if (!mapping[name]) {
         const created = await apiFetch<TeamApiRow>(`/api/teams/${weekId}`, {
           method: "POST",
@@ -281,6 +315,11 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     return mapping;
   };
 
+  const getLegacyReserveTeamIds = async (token: string) => {
+    const teams = await apiFetch<TeamApiRow[]>(`/api/teams/${weekId}`, { token });
+    return teams.filter((team) => LEGACY_RESERVE_NAMES.includes(team.name as (typeof LEGACY_RESERVE_NAMES)[number])).map((team) => team.id);
+  };
+
   const persistTeams = async (nextState: TeamState) => {
     try {
       const token = await getAccessToken();
@@ -290,7 +329,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
 
       const ids = Object.keys(teamIdByName).length ? teamIdByName : await ensureTeamIds(token);
 
-      for (const teamName of ["Team 1", "Team 2"]) {
+      for (const teamName of TEAM_NAMES) {
         const teamId = ids[teamName];
         if (!teamId) {
           continue;
@@ -301,6 +340,15 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
           method: "PUT",
           token,
           body: JSON.stringify({ userIds }),
+        });
+      }
+
+      const legacyReserveIds = await getLegacyReserveTeamIds(token);
+      for (const legacyTeamId of legacyReserveIds) {
+        await apiFetch(`/api/teams/${legacyTeamId}/members`, {
+          method: "PUT",
+          token,
+          body: JSON.stringify({ userIds: [] }),
         });
       }
     } catch (error) {
@@ -321,10 +369,17 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
         return;
       }
 
-      const [list, teams] = await Promise.all([
+      const [list, initialTeams] = await Promise.all([
         apiFetch<GuildWarRegistration[]>(`/api/guild-war/registrations/${weekId}`, { token }),
         apiFetch<TeamApiRow[]>(`/api/teams/${weekId}`, { token }),
       ]);
+
+      let teams = initialTeams;
+      const missingTeamCount = TEAM_NAMES.filter((name) => !teams.some((team) => team.name === name)).length;
+      if (canDrag && missingTeamCount > 0) {
+        await ensureTeamIds(token);
+        teams = await apiFetch<TeamApiRow[]>(`/api/teams/${weekId}`, { token });
+      }
 
       const uniqueMembers: TeamMemberEntry[] = [];
       const seen = new Set<string>();
@@ -338,16 +393,20 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
             key,
             characterName: item.users?.character_name ?? item.users?.username ?? `User-${item.user_id.slice(0, 8)}`,
             build: item.users?.build ?? "-",
+            registrationIndex: uniqueMembers.length + 1,
           };
           uniqueMembers.push(entry);
           memberByKey.set(key, entry);
         }
       }
 
-      const canonicalTeams: Partial<Record<"Team 1" | "Team 2", TeamApiRow>> = {};
+      const canonicalTeams: Partial<Record<TeamName, TeamApiRow>> = {};
+      const legacyReserveTeams: TeamApiRow[] = [];
       for (const team of teams) {
-        if ((team.name === "Team 1" || team.name === "Team 2") && !canonicalTeams[team.name]) {
-          canonicalTeams[team.name] = team;
+        if (TEAM_NAMES.includes(team.name as TeamName) && !canonicalTeams[team.name as TeamName]) {
+          canonicalTeams[team.name as TeamName] = team;
+        } else if (LEGACY_RESERVE_NAMES.includes(team.name as (typeof LEGACY_RESERVE_NAMES)[number])) {
+          legacyReserveTeams.push(team);
         }
       }
 
@@ -355,9 +414,10 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
       const persistedTeams: Record<string, TeamMemberEntry[]> = {
         "Team 1": [],
         "Team 2": [],
+        Reserve: [],
       };
 
-      for (const teamName of ["Team 1", "Team 2"] as const) {
+      for (const teamName of TEAM_NAMES) {
         const team = canonicalTeams[teamName];
         if (!team) {
           continue;
@@ -369,12 +429,25 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
           .filter((member): member is TeamMemberEntry => Boolean(member));
       }
 
+      const reserveMembers = legacyReserveTeams
+        .flatMap((team) => team.team_members ?? [])
+        .map((member) => memberByKey.get(member.user_id))
+        .filter((member): member is TeamMemberEntry => Boolean(member));
+
+      if (reserveMembers.length > 0) {
+        const dedupedReserveMembers = new Map<string, TeamMemberEntry>();
+        for (const member of [...persistedTeams.Reserve, ...reserveMembers]) {
+          dedupedReserveMembers.set(member.key, member);
+        }
+        persistedTeams.Reserve = sortByRegistrationOrder([...dedupedReserveMembers.values()]);
+      }
+
       setTeamIdByName(mapping);
 
       setState(() => {
         const assigned = new Set(Object.values(persistedTeams).flat().map((member) => member.key));
         return {
-          pool: uniqueMembers.filter((member) => !assigned.has(member.key)),
+          pool: sortByRegistrationOrder(uniqueMembers.filter((member) => !assigned.has(member.key))),
           teams: persistedTeams,
         };
       });
@@ -436,10 +509,12 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
 
   const filteredPool = useMemo(
     () =>
-      state.pool.filter((member) => {
-        const haystack = `${member.characterName} ${member.build}`.toLowerCase();
-        return haystack.includes(normalizedSearch);
-      }),
+      sortByRegistrationOrder(
+        state.pool.filter((member) => {
+          const haystack = `${member.characterName} ${member.build}`.toLowerCase();
+          return haystack.includes(normalizedSearch);
+        }),
+      ),
     [normalizedSearch, state.pool],
   );
 
@@ -497,7 +572,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
       title="Guild War Team Builder"
       subtitle={
         canDrag
-          ? "Click a member to open popover and move between Pool / Team 1 / Team 2."
+          ? "Click a member to open popover and move between Pool / Team 1 / Team 2 / Reserve."
           : "Read-only mode. Only ADMIN/SUPER_ADMIN can move and arrange teams."
       }
     >
@@ -541,7 +616,9 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
                 itemClassName={
                   team === "Team 1"
                     ? "border-rose-400/55 bg-rose-950/40 text-rose-50"
-                    : "border-cyan-400/55 bg-cyan-950/40 text-cyan-50"
+                    : team === "Team 2"
+                      ? "border-cyan-400/55 bg-cyan-950/40 text-cyan-50"
+                      : "border-amber-300/55 bg-amber-950/30 text-amber-50"
                 }
               />
             ))}
