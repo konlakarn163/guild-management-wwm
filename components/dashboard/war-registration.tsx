@@ -30,6 +30,7 @@ interface WarRegistrationProps {
 
 export function WarRegistration({ canManageAll = false }: WarRegistrationProps) {
   const [registered, setRegistered] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [_registrants, setRegistrants] = useState<WarRegistrant[]>([]);
   const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
   const [_expandedRegistrantId, _setExpandedRegistrantId] = useState<string | null>(null);
@@ -165,6 +166,7 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
   }, [canManageAll]);
 
   const onRegister = async () => {
+    setIsSubmitting(true);
     try {
       const token = await getAccessToken();
       if (!token) {
@@ -187,10 +189,42 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
       const errorMessage = error instanceof Error ? error.message : "Failed to register";
       setMessage(errorMessage);
       toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const onRegisterToReserve = async () => {
+    setIsSubmitting(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        const errorMessage = "Please login first";
+        setMessage(errorMessage);
+        toast.error(errorMessage);
+        return;
+      }
+
+      await apiFetch("/api/guild-war/registrations/reserve", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ weekId }),
+      });
+
+      setMessage("Registered to reserve successfully");
+      toast.success("Registered to reserve successfully");
+      await load();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to register to reserve";
+      setMessage(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const onCancel = async () => {
+    setIsSubmitting(true);
     try {
       const token = await getAccessToken();
       if (!token) {
@@ -212,6 +246,8 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
       const errorMessage = error instanceof Error ? error.message : "Failed to cancel";
       setMessage(errorMessage);
       toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -254,6 +290,8 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
     return buildOptions.find((item) => item.label === build)?.color ?? "#94a3b8";
   };
 
+  const isRegisterActionDisabled = isSubmitting || registered;
+
   return (
     <SectionCard title="Guild War Registration" subtitle={`Week: ${weekRangeLabel}`}>
       {isLoadingRegistration ? (
@@ -270,18 +308,31 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
             type="button"
             onClick={() => void onRegister()}
             className="rounded-xl"
+            disabled={isRegisterActionDisabled}
           >
             Register
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void onRegisterToReserve()}
+            variant="outline"
+            className="rounded-xl border-amber-300/60 text-amber-100 hover:bg-amber-400/10"
+            disabled={isRegisterActionDisabled}
+          >
+            Register To Reserve
           </Button>
           <Button
             type="button"
             onClick={() => void onCancel()}
             variant="outline"
             className="rounded-xl"
+            disabled={isSubmitting}
           >
             Cancel
           </Button>
-          <span className="text-sm font-semibold text-slate-300">Status: {registered ? "Registered" : "Not registered"}</span>
+          <span className="text-sm font-semibold text-slate-300">
+            Status: {registered ? "Registered - cancel before registering again" : "Not registered"}
+          </span>
         </div>
       )}
 

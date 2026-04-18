@@ -39,6 +39,27 @@ export const guildWarController = {
     res.status(201).json(registration);
   }),
 
+  registerToReserve: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.authUser) {
+      throw new HttpError(401, "Unauthorized");
+    }
+
+    const body = z.object({ weekId: weekSchema.shape.weekId }).parse(req.body);
+    const weekId = normalizeWeekIdToMonday(body.weekId);
+    const registration = await guildWarService.registerToReserve(req.authUser.id, weekId);
+    getSocketServer().to(`guildWar:week:${weekId}`).emit("guildWar:registrationsUpdated", {
+      weekId,
+      action: "register-reserve",
+      userId: req.authUser.id,
+    });
+    getSocketServer().to(`guildWar:week:${weekId}`).emit("guildWar:teamMoved", {
+      weekId,
+      memberKey: req.authUser.id,
+      targetZone: "Reserve",
+    });
+    res.status(201).json(registration);
+  }),
+
   adminRegister: asyncHandler(async (req: Request, res: Response) => {
     if (!req.authUser) {
       throw new HttpError(401, "Unauthorized");
