@@ -16,7 +16,7 @@ const copy = {
   },
 } as const;
 
-const RECRUIT_LINK = "https://www.facebook.com/groups/3061563884136004/user/100005438229364/";
+const RECRUIT_LINK = "https://www.facebook.com/shay.wannasilp";
 
 export function SiteFooter() {
   const [mounted, setMounted] = useState(false);
