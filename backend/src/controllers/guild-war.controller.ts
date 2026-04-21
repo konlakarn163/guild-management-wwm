@@ -58,6 +58,13 @@ export const guildWarController = {
     res.json(windows);
   }),
 
+  getWindowDetails: asyncHandler(async (req: Request, res: Response) => {
+    assertAdmin(req);
+    const { id } = windowIdSchema.parse(req.params);
+    const details = await guildWarService.getRegistrationWindowDetails(id);
+    res.json(details);
+  }),
+
   createWindow: asyncHandler(async (req: Request, res: Response) => {
     assertAdmin(req);
     const payload = createWindowSchema.parse(req.body);
@@ -103,7 +110,7 @@ export const guildWarController = {
       dayId: window.day_id,
       action: "window-deleted",
     });
-    res.status(204).send();
+    res.json(window);
   }),
 
   cleanupPreviousMonthRegistrations: asyncHandler(async (req: Request, res: Response) => {

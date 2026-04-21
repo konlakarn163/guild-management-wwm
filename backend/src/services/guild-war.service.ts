@@ -11,6 +11,53 @@ interface RegistrationWindow {
   updated_at: string;
 }
 
+interface TeamRow {
+  id: string;
+  week_id: string;
+  day_id: string | null;
+  registration_window_id: string | null;
+  name: string;
+  is_locked: boolean;
+  team_members?: Array<{
+    id: string;
+    user_id: string;
+  }>;
+}
+
+async function listTeamsForWindow(window: RegistrationWindow) {
+  const { data, error } = await supabaseAdmin
+    .from("teams")
+    .select("id, week_id, day_id, registration_window_id, name, is_locked, team_members(id, user_id)")
+    .or(`registration_window_id.eq.${window.id},day_id.eq.${window.day_id}`)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new HttpError(500, error.message);
+  }
+
+  return (data ?? []) as TeamRow[];
+}
+
+async function deleteTeamsForWindow(window: RegistrationWindow) {
+  const teams = await listTeamsForWindow(window);
+  const teamIds = [...new Set(teams.map((team) => team.id))];
+
+  if (teamIds.length === 0) {
+    return { deletedTeamCount: 0 };
+  }
+
+  const { error: deleteTeamsError, count } = await supabaseAdmin
+    .from("teams")
+    .delete({ count: "exact" })
+    .in("id", teamIds);
+
+  if (deleteTeamsError) {
+    throw new HttpError(500, deleteTeamsError.message);
+  }
+
+  return { deletedTeamCount: count ?? teamIds.length };
+}
+
 async function assertActiveUser(userId: string) {
   const { data: user, error: userError } = await supabaseAdmin
     .from("users")
@@ -148,6 +195,33 @@ export const guildWarService = {
     return data ?? [];
   },
 
+  async getRegistrationWindowDetails(windowId: string) {
+    const { data: window, error: windowError } = await supabaseAdmin
+      .from("guild_war_registration_windows")
+      .select("id, day_id, week_id, is_open, created_at, updated_at")
+      .eq("id", windowId)
+      .maybeSingle();
+
+    if (windowError) {
+      throw new HttpError(500, windowError.message);
+    }
+
+    if (!window) {
+      throw new HttpError(404, "Registration window not found");
+    }
+
+    const [registrations, teams] = await Promise.all([
+      this.listRegistrationsByDay(window.day_id),
+      listTeamsForWindow(window as RegistrationWindow),
+    ]);
+
+    return {
+      window,
+      registrations,
+      teams,
+    };
+  },
+
   async getOpenRegistrationWindow() {
     const { data, error } = await supabaseAdmin
       .from("guild_war_registration_windows")
@@ -230,6 +304,31 @@ export const guildWarService = {
   },
 
   async deleteRegistrationWindow(windowId: string) {
+    const { data: existingWindow, error: existingWindowError } = await supabaseAdmin
+      .from("guild_war_registration_windows")
+      .select("id, day_id, week_id, is_open, created_at, updated_at")
+      .eq("id", windowId)
+      .maybeSingle();
+
+    if (existingWindowError) {
+      throw new HttpError(500, existingWindowError.message);
+    }
+
+    if (!existingWindow) {
+      throw new HttpError(404, "Registration window not found");
+    }
+
+    const { count: deletedRegistrationsCount, error: deleteRegistrationsError } = await supabaseAdmin
+      .from("guild_war_registrations")
+      .delete({ count: "exact" })
+      .eq("day_id", existingWindow.day_id);
+
+    if (deleteRegistrationsError) {
+      throw new HttpError(500, deleteRegistrationsError.message);
+    }
+
+    const { deletedTeamCount } = await deleteTeamsForWindow(existingWindow as RegistrationWindow);
+
     const { data, error } = await supabaseAdmin
       .from("guild_war_registration_windows")
       .delete()
@@ -245,7 +344,11 @@ export const guildWarService = {
       throw new HttpError(404, "Registration window not found");
     }
 
-    return data;
+    return {
+      ...data,
+      deletedRegistrationsCount: deletedRegistrationsCount ?? 0,
+      deletedTeamCount,
+    };
   },
 
   async cleanupRegistrationsBeforeCurrentMonth() {
@@ -253,6 +356,24 @@ export const guildWarService = {
     const cutoffYear = now.getUTCFullYear();
     const cutoffMonth = String(now.getUTCMonth() + 1).padStart(2, "0");
     const cutoffDate = `${cutoffYear}-${cutoffMonth}-01`;
+
+    const { data: oldWindows, error: oldWindowsError } = await supabaseAdmin
+      .from("guild_war_registration_windows")
+      .select("id, day_id, week_id, is_open, created_at, updated_at")
+      .lt("day_id", cutoffDate);
+
+    if (oldWindowsError) {
+      throw new HttpError(500, oldWindowsError.message);
+    }
+
+    const uniqueOldWindows = (oldWindows ?? []) as RegistrationWindow[];
+    let deletedWindowCount = 0;
+    let deletedTeamCount = 0;
+
+    for (const window of uniqueOldWindows) {
+      const result = await deleteTeamsForWindow(window);
+      deletedTeamCount += result.deletedTeamCount;
+    }
 
     const { count: deletedByDayId, error: deleteByDayIdError } = await supabaseAdmin
       .from("guild_war_registrations")
@@ -273,9 +394,25 @@ export const guildWarService = {
       throw new HttpError(500, deleteByWeekIdError.message);
     }
 
+    if (uniqueOldWindows.length > 0) {
+      const windowIds = uniqueOldWindows.map((window) => window.id);
+      const { count: deletedWindows, error: deleteWindowsError } = await supabaseAdmin
+        .from("guild_war_registration_windows")
+        .delete({ count: "exact" })
+        .in("id", windowIds);
+
+      if (deleteWindowsError) {
+        throw new HttpError(500, deleteWindowsError.message);
+      }
+
+      deletedWindowCount = deletedWindows ?? uniqueOldWindows.length;
+    }
+
     return {
       cutoffDate,
       deletedCount: (deletedByDayId ?? 0) + (deletedByWeekId ?? 0),
+      deletedWindowCount,
+      deletedTeamCount,
     };
   },
 

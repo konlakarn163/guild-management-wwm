@@ -5,6 +5,7 @@ export const guildWarRouter = Router();
 
 guildWarRouter.get("/windows/open", guildWarController.listOpen);
 guildWarRouter.get("/windows", guildWarController.listWindows);
+guildWarRouter.get("/windows/:id/details", guildWarController.getWindowDetails);
 guildWarRouter.post("/windows", guildWarController.createWindow);
 guildWarRouter.post("/windows/:id/open", guildWarController.openWindow);
 guildWarRouter.post("/windows/:id/close", guildWarController.closeWindow);

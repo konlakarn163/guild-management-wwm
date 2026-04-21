@@ -41,6 +41,34 @@ export interface OpenGuildWarRegistrationResponse {
   registrations: GuildWarRegistration[];
 }
 
+export interface GuildWarTeamMemberRef {
+  id: string;
+  user_id: string;
+}
+
+export interface GuildWarTeam {
+  id: string;
+  week_id: string;
+  day_id?: string | null;
+  registration_window_id?: string | null;
+  name: string;
+  is_locked?: boolean;
+  team_members?: GuildWarTeamMemberRef[];
+}
+
+export interface GuildWarRegistrationWindowDetails {
+  window: GuildWarRegistrationWindow;
+  registrations: GuildWarRegistration[];
+  teams: GuildWarTeam[];
+}
+
+export interface GuildWarCleanupPreviousMonthsResponse {
+  cutoffDate: string;
+  deletedCount: number;
+  deletedWindowCount: number;
+  deletedTeamCount: number;
+}
+
 export interface TeamMember {
   id: string;
   user_id: string;
