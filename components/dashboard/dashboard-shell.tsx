@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminApprovals } from "@/components/dashboard/admin-approvals";
+// import { AdminApprovals } from "@/components/dashboard/admin-approvals";
 import { ProfileCard } from "@/components/dashboard/profile-card";
 import { TeamBuilder } from "@/components/dashboard/team-builder";
 import { WarRegistration } from "@/components/dashboard/war-registration";
@@ -67,7 +67,7 @@ export function DashboardShell() {
         <>
           <WarRegistration canManageAll={Boolean(isAdmin)} />
           <TeamBuilder canDrag={Boolean(isAdmin)} />
-          {isAdmin ? <AdminApprovals /> : null}
+          {/* {isAdmin ? <AdminApprovals /> : null} */}
         </>
       ) : null}
     </>
