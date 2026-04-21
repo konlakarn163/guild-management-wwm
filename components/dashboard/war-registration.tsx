@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/api";
 import { getAccessToken, getCurrentUser } from "@/lib/client-auth";
 import { getRealtimeSocket } from "@/lib/realtime";
 import type { BuildOption, GuildWarRegistration, OpenGuildWarRegistrationResponse, UserRow } from "@/lib/types";
+import { getCurrentWeekId } from "@/lib/week-id";
 
 interface WarRegistrant {
   id: string;
@@ -127,15 +128,10 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
   useEffect(() => {
     const socket = getRealtimeSocket();
-    if (weekId) {
-      socket.emit("guildWar:joinWeek", weekId);
-    }
+    const currentWeekId = getCurrentWeekId();
+    socket.emit("guildWar:joinWeek", currentWeekId);
 
-    const onRegistrationsUpdated = (payload: { weekId: string }) => {
-      if (weekId && payload.weekId !== weekId) {
-        return;
-      }
-
+    const onRegistrationsUpdated = (_payload: { weekId: string; dayId?: string; action?: string }) => {
       void load();
     };
 
@@ -143,11 +139,9 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
     return () => {
       socket.off("guildWar:registrationsUpdated", onRegistrationsUpdated);
-      if (weekId) {
-        socket.emit("guildWar:leaveWeek", weekId);
-      }
+      socket.emit("guildWar:leaveWeek", currentWeekId);
     };
-  }, [weekId]);
+  }, []);
 
   useEffect(() => {
     if (!canManageAll) {

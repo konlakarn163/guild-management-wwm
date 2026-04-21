@@ -38,8 +38,8 @@ export default async function AdminPage() {
           </p>
         </header>
 
-        <UserManagementPanel />
         <WarRegistrationManager />
+        <UserManagementPanel />
         <GuildSettingsForm />
       </main>
     </AuthGuard>

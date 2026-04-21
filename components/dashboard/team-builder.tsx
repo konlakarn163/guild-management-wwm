@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/client-auth";
 import { getRealtimeSocket } from "@/lib/realtime";
-import type { BuildOption, GuildWarRegistration } from "@/lib/types";
+import type { BuildOption, GuildWarRegistration, GuildWarRegistrationWindow } from "@/lib/types";
 import { getCurrentWeekId } from "@/lib/week-id";
 
 interface PublicGuildResponse {
@@ -251,6 +251,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   const [_poolMessage, setPoolMessage] = useState<string | null>(null);
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const latestPersistStateRef = useRef<TeamState>(defaultState);
+  const currentDayIdRef = useRef<string | null>(null);
   const weekId = useMemo(() => getCurrentWeekId(), []);
   const teamKeys = useMemo(() => Object.keys(state.teams), [state.teams]);
   const zones = useMemo(() => ["pool", ...teamKeys], [teamKeys]);
@@ -290,8 +291,8 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     return next;
   };
 
-  const ensureTeamIds = async (token: string) => {
-    const teams = await apiFetch<TeamApiRow[]>(`/api/teams/${weekId}`, { token });
+  const ensureTeamIds = async (token: string, dayId: string) => {
+    const teams = await apiFetch<TeamApiRow[]>(`/api/teams/${weekId}?dayId=${dayId}`, { token });
     const mapping: Record<string, string> = {};
 
     for (const team of teams) {
@@ -305,7 +306,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
         const created = await apiFetch<TeamApiRow>(`/api/teams/${weekId}`, {
           method: "POST",
           token,
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, dayId }),
         });
         mapping[name] = created.id;
       }
@@ -315,8 +316,8 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     return mapping;
   };
 
-  const getLegacyReserveTeamIds = async (token: string) => {
-    const teams = await apiFetch<TeamApiRow[]>(`/api/teams/${weekId}`, { token });
+  const getLegacyReserveTeamIds = async (token: string, dayId: string) => {
+    const teams = await apiFetch<TeamApiRow[]>(`/api/teams/${weekId}?dayId=${dayId}`, { token });
     return teams.filter((team) => LEGACY_RESERVE_NAMES.includes(team.name as (typeof LEGACY_RESERVE_NAMES)[number])).map((team) => team.id);
   };
 
@@ -327,7 +328,12 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
         return;
       }
 
-      const ids = Object.keys(teamIdByName).length ? teamIdByName : await ensureTeamIds(token);
+      const dayId = currentDayIdRef.current;
+      if (!dayId) {
+        return;
+      }
+
+      const ids = Object.keys(teamIdByName).length ? teamIdByName : await ensureTeamIds(token, dayId);
 
       for (const teamName of TEAM_NAMES) {
         const teamId = ids[teamName];
@@ -343,7 +349,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
         });
       }
 
-      const legacyReserveIds = await getLegacyReserveTeamIds(token);
+      const legacyReserveIds = await getLegacyReserveTeamIds(token, dayId);
       for (const legacyTeamId of legacyReserveIds) {
         await apiFetch(`/api/teams/${legacyTeamId}/members`, {
           method: "PUT",
@@ -369,16 +375,24 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
         return;
       }
 
-      const [list, initialTeams] = await Promise.all([
-        apiFetch<GuildWarRegistration[]>(`/api/guild-war/registrations/${weekId}`, { token }),
-        apiFetch<TeamApiRow[]>(`/api/teams/${weekId}`, { token }),
-      ]);
+      const openData = await apiFetch<{ window: GuildWarRegistrationWindow | null; registrations: GuildWarRegistration[] }>("/api/guild-war/registrations/open", { token });
+      const { window: openWindow, registrations: list } = openData;
 
-      let teams = initialTeams;
+      if (!openWindow) {
+        currentDayIdRef.current = null;
+        setState({ pool: [], teams: { "Team 1": [], "Team 2": [], Reserve: [] } });
+        setIsLoadingPool(false);
+        return;
+      }
+
+      const dayId = openWindow.day_id;
+      currentDayIdRef.current = dayId;
+
+      let teams = await apiFetch<TeamApiRow[]>(`/api/teams/${weekId}?dayId=${dayId}`, { token });
       const missingTeamCount = TEAM_NAMES.filter((name) => !teams.some((team) => team.name === name)).length;
       if (canDrag && missingTeamCount > 0) {
-        await ensureTeamIds(token);
-        teams = await apiFetch<TeamApiRow[]>(`/api/teams/${weekId}`, { token });
+        await ensureTeamIds(token, dayId);
+        teams = await apiFetch<TeamApiRow[]>(`/api/teams/${weekId}?dayId=${dayId}`, { token });
       }
 
       const uniqueMembers: TeamMemberEntry[] = [];
@@ -481,11 +495,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     const socket = getRealtimeSocket();
     socket.emit("guildWar:joinWeek", weekId);
 
-    const onRegistrationsUpdated = (payload: { weekId: string }) => {
-      if (payload.weekId !== weekId) {
-        return;
-      }
-
+    const onRegistrationsUpdated = (_payload: { weekId: string; dayId?: string }) => {
       void refreshPoolFromRegistrants();
     };
 
