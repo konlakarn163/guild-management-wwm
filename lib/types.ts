@@ -16,6 +16,7 @@ export interface GuildInfo {
 
 export interface GuildWarRegistration {
   id: string;
+  day_id?: string | null;
   week_id: string;
   user_id: string;
   users?: {
@@ -24,6 +25,20 @@ export interface GuildWarRegistration {
     character_name?: string;
     build?: string;
   };
+}
+
+export interface GuildWarRegistrationWindow {
+  id: string;
+  day_id: string;
+  week_id: string;
+  is_open: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface OpenGuildWarRegistrationResponse {
+  window: GuildWarRegistrationWindow | null;
+  registrations: GuildWarRegistration[];
 }
 
 export interface TeamMember {

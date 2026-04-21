@@ -1,5 +1,15 @@
 import { supabaseAdmin } from "../lib/supabase.js";
 import { HttpError } from "../utils/http-error.js";
+import { deriveWeekIdFromDayId, isWeekendDayId } from "../utils/week-id.js";
+
+interface RegistrationWindow {
+  id: string;
+  day_id: string;
+  week_id: string;
+  is_open: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 async function assertActiveUser(userId: string) {
   const { data: user, error: userError } = await supabaseAdmin
@@ -21,11 +31,11 @@ async function assertActiveUser(userId: string) {
   }
 }
 
-async function clearWeekTeamMembership(userId: string, weekId: string) {
+async function clearTeamMembershipForDay(userId: string, dayId: string, weekId: string) {
   const { data: teams, error: teamsError } = await supabaseAdmin
     .from("teams")
     .select("id")
-    .eq("week_id", weekId);
+    .or(`day_id.eq.${dayId},and(day_id.is.null,week_id.eq.${weekId})`);
 
   if (teamsError) {
     throw new HttpError(500, teamsError.message);
@@ -47,11 +57,60 @@ async function clearWeekTeamMembership(userId: string, weekId: string) {
   }
 }
 
+async function getRequiredOpenWindow() {
+  const { data, error } = await supabaseAdmin
+    .from("guild_war_registration_windows")
+    .select("id, day_id, week_id, is_open, created_at, updated_at")
+    .eq("is_open", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new HttpError(500, error.message);
+  }
+
+  if (!data) {
+    throw new HttpError(403, "Registration is currently closed");
+  }
+
+  return data as RegistrationWindow;
+}
+
+async function upsertRegistration(userId: string, dayId: string, weekId: string) {
+  const { data: existingRegistration, error: existingRegistrationError } = await supabaseAdmin
+    .from("guild_war_registrations")
+    .select("id, day_id, week_id, user_id")
+    .eq("user_id", userId)
+    .eq("day_id", dayId)
+    .maybeSingle();
+
+  if (existingRegistrationError) {
+    throw new HttpError(500, existingRegistrationError.message);
+  }
+
+  if (existingRegistration) {
+    return existingRegistration;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("guild_war_registrations")
+    .insert({ user_id: userId, day_id: dayId, week_id: weekId })
+    .select("id, day_id, week_id, user_id")
+    .single();
+
+  if (error) {
+    throw new HttpError(400, error.message);
+  }
+
+  return data;
+}
+
 export const guildWarService = {
   async listRegistrations(weekId: string) {
     const { data, error } = await supabaseAdmin
       .from("guild_war_registrations")
-      .select("id, week_id, user_id, users(username, discord_id, character_name, build)")
+      .select("id, day_id, week_id, user_id, users(username, discord_id, character_name, build)")
       .eq("week_id", weekId)
       .order("created_at", { ascending: true });
 
@@ -62,29 +121,74 @@ export const guildWarService = {
     return data;
   },
 
-  async register(userId: string, weekId: string) {
-    await assertActiveUser(userId);
-    await clearWeekTeamMembership(userId, weekId);
-
-    const { data: existingRegistration, error: existingRegistrationError } = await supabaseAdmin
+  async listRegistrationsByDay(dayId: string) {
+    const { data, error } = await supabaseAdmin
       .from("guild_war_registrations")
-      .select("id, week_id, user_id")
-      .eq("user_id", userId)
-      .eq("week_id", weekId)
-      .maybeSingle();
+      .select("id, day_id, week_id, user_id, users(username, discord_id, character_name, build)")
+      .eq("day_id", dayId)
+      .order("created_at", { ascending: true });
 
-    if (existingRegistrationError) {
-      throw new HttpError(500, existingRegistrationError.message);
+    if (error) {
+      throw new HttpError(500, error.message);
     }
 
-    if (existingRegistration) {
-      return existingRegistration;
+    return data;
+  },
+
+  async listRegistrationWindows() {
+    const { data, error } = await supabaseAdmin
+      .from("guild_war_registration_windows")
+      .select("id, day_id, week_id, is_open, created_at, updated_at")
+      .order("day_id", { ascending: true });
+
+    if (error) {
+      throw new HttpError(500, error.message);
+    }
+
+    return data ?? [];
+  },
+
+  async getOpenRegistrationWindow() {
+    const { data, error } = await supabaseAdmin
+      .from("guild_war_registration_windows")
+      .select("id, day_id, week_id, is_open, created_at, updated_at")
+      .eq("is_open", true)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new HttpError(500, error.message);
+    }
+
+    return data as RegistrationWindow | null;
+  },
+
+  async createRegistrationWindow(dayId: string, createdBy: string) {
+    if (!isWeekendDayId(dayId)) {
+      throw new HttpError(400, "dayId must be Saturday or Sunday");
+    }
+
+    const weekId = deriveWeekIdFromDayId(dayId);
+
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from("guild_war_registration_windows")
+      .select("id, day_id, week_id, is_open, created_at, updated_at")
+      .eq("day_id", dayId)
+      .maybeSingle();
+
+    if (existingError) {
+      throw new HttpError(500, existingError.message);
+    }
+
+    if (existing) {
+      return existing;
     }
 
     const { data, error } = await supabaseAdmin
-      .from("guild_war_registrations")
-      .insert({ user_id: userId, week_id: weekId })
-      .select("id, week_id, user_id")
+      .from("guild_war_registration_windows")
+      .insert({ day_id: dayId, week_id: weekId, created_by: createdBy, is_open: false })
+      .select("id, day_id, week_id, is_open, created_at, updated_at")
       .single();
 
     if (error) {
@@ -94,38 +198,107 @@ export const guildWarService = {
     return data;
   },
 
-  async registerToReserve(userId: string, weekId: string) {
-    await assertActiveUser(userId);
+  async setWindowOpenState(windowId: string, shouldOpen: boolean) {
+    if (shouldOpen) {
+      const { error: closeAllError } = await supabaseAdmin
+        .from("guild_war_registration_windows")
+        .update({ is_open: false })
+        .eq("is_open", true)
+        .neq("id", windowId);
 
-    const { data: existingRegistration, error: existingRegistrationError } = await supabaseAdmin
-      .from("guild_war_registrations")
-      .select("id, week_id, user_id")
-      .eq("user_id", userId)
-      .eq("week_id", weekId)
-      .maybeSingle();
-
-    if (existingRegistrationError) {
-      throw new HttpError(500, existingRegistrationError.message);
+      if (closeAllError) {
+        throw new HttpError(500, closeAllError.message);
+      }
     }
 
-    const registration = existingRegistration ?? (await (async () => {
-      const { data, error } = await supabaseAdmin
-        .from("guild_war_registrations")
-        .insert({ user_id: userId, week_id: weekId })
-        .select("id, week_id, user_id")
-        .single();
+    const { data, error } = await supabaseAdmin
+      .from("guild_war_registration_windows")
+      .update({ is_open: shouldOpen })
+      .eq("id", windowId)
+      .select("id, day_id, week_id, is_open, created_at, updated_at")
+      .maybeSingle();
 
-      if (error) {
-        throw new HttpError(400, error.message);
-      }
+    if (error) {
+      throw new HttpError(400, error.message);
+    }
 
-      return data;
-    })());
+    if (!data) {
+      throw new HttpError(404, "Registration window not found");
+    }
+
+    return data;
+  },
+
+  async deleteRegistrationWindow(windowId: string) {
+    const { data, error } = await supabaseAdmin
+      .from("guild_war_registration_windows")
+      .delete()
+      .eq("id", windowId)
+      .select("id, day_id, week_id, is_open, created_at, updated_at")
+      .maybeSingle();
+
+    if (error) {
+      throw new HttpError(400, error.message);
+    }
+
+    if (!data) {
+      throw new HttpError(404, "Registration window not found");
+    }
+
+    return data;
+  },
+
+  async cleanupRegistrationsBeforeCurrentMonth() {
+    const now = new Date();
+    const cutoffYear = now.getUTCFullYear();
+    const cutoffMonth = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const cutoffDate = `${cutoffYear}-${cutoffMonth}-01`;
+
+    const { count: deletedByDayId, error: deleteByDayIdError } = await supabaseAdmin
+      .from("guild_war_registrations")
+      .delete({ count: "exact" })
+      .lt("day_id", cutoffDate);
+
+    if (deleteByDayIdError) {
+      throw new HttpError(500, deleteByDayIdError.message);
+    }
+
+    const { count: deletedByWeekId, error: deleteByWeekIdError } = await supabaseAdmin
+      .from("guild_war_registrations")
+      .delete({ count: "exact" })
+      .is("day_id", null)
+      .lt("week_id", cutoffDate);
+
+    if (deleteByWeekIdError) {
+      throw new HttpError(500, deleteByWeekIdError.message);
+    }
+
+    return {
+      cutoffDate,
+      deletedCount: (deletedByDayId ?? 0) + (deletedByWeekId ?? 0),
+    };
+  },
+
+  async register(userId: string) {
+    await assertActiveUser(userId);
+
+    const openWindow = await getRequiredOpenWindow();
+    await clearTeamMembershipForDay(userId, openWindow.day_id, openWindow.week_id);
+
+    return upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
+  },
+
+  async registerToReserve(userId: string) {
+    await assertActiveUser(userId);
+
+    const openWindow = await getRequiredOpenWindow();
+    const registration = await upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
 
     const { data: teams, error: teamsError } = await supabaseAdmin
       .from("teams")
       .select("id, name")
-      .eq("week_id", weekId)
+      .eq("week_id", openWindow.week_id)
+      .eq("day_id", openWindow.day_id)
       .order("created_at", { ascending: true });
 
     if (teamsError) {
@@ -137,7 +310,7 @@ export const guildWarService = {
     if (!reserveTeamId) {
       const { data: createdTeam, error: createTeamError } = await supabaseAdmin
         .from("teams")
-        .insert({ week_id: weekId, name: "Reserve" })
+        .insert({ week_id: openWindow.week_id, day_id: openWindow.day_id, name: "Reserve", registration_window_id: openWindow.id })
         .select("id")
         .single();
 
@@ -148,7 +321,7 @@ export const guildWarService = {
       reserveTeamId = createdTeam.id;
     }
 
-    await clearWeekTeamMembership(userId, weekId);
+    await clearTeamMembershipForDay(userId, openWindow.day_id, openWindow.week_id);
 
     const { error: reserveMembershipError } = await supabaseAdmin
       .from("team_members")
@@ -161,14 +334,24 @@ export const guildWarService = {
     return registration;
   },
 
-  async cancel(userId: string, weekId: string) {
-    await clearWeekTeamMembership(userId, weekId);
+  async adminRegister(userId: string) {
+    await assertActiveUser(userId);
+
+    const openWindow = await getRequiredOpenWindow();
+    await clearTeamMembershipForDay(userId, openWindow.day_id, openWindow.week_id);
+
+    return upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
+  },
+
+  async cancel(userId: string) {
+    const openWindow = await getRequiredOpenWindow();
+    await clearTeamMembershipForDay(userId, openWindow.day_id, openWindow.week_id);
 
     const { error } = await supabaseAdmin
       .from("guild_war_registrations")
       .delete()
       .eq("user_id", userId)
-      .eq("week_id", weekId);
+      .eq("day_id", openWindow.day_id);
 
     if (error) {
       throw new HttpError(500, error.message);

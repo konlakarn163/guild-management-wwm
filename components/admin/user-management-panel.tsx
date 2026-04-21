@@ -14,12 +14,20 @@ interface PublicGuildResponse {
 export function UserManagementPanel() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"ALL" | UserStatus>("ALL");
+  const [role, setRole] = useState<"ALL" | UserRole>("ALL");
+  const [build, setBuild] = useState<string>("ALL");
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [totalUsersCount, setTotalUsersCount] = useState(0);
   const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
   const [isLoadingBuildOptions, setIsLoadingBuildOptions] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
 
-  const fetchUsers = async (nextSearch: string, nextStatus: "ALL" | UserStatus) => {
+  const fetchUsers = async (
+    nextSearch: string,
+    nextStatus: "ALL" | UserStatus,
+    nextRole: "ALL" | UserRole,
+    nextBuild: string,
+  ) => {
     const token = await getAccessToken();
     if (!token) {
       setMessage("Please login first");
@@ -33,14 +41,25 @@ export function UserManagementPanel() {
     if (nextStatus !== "ALL") {
       params.set("status", nextStatus);
     }
+    if (nextRole !== "ALL") {
+      params.set("role", nextRole);
+    }
+    if (nextBuild !== "ALL") {
+      params.set("build", nextBuild);
+    }
 
     const query = params.toString();
     return apiFetch<UserRow[]>(`/api/users${query ? `?${query}` : ""}`, { token });
   };
 
-  const loadUsers = async (nextSearch = search, nextStatus = status) => {
+  const loadUsers = async (
+    nextSearch = search,
+    nextStatus = status,
+    nextRole = role,
+    nextBuild = build,
+  ) => {
     try {
-      const data = await fetchUsers(nextSearch, nextStatus);
+      const data = await fetchUsers(nextSearch, nextStatus, nextRole, nextBuild);
       setUsers(data);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to load users");
@@ -50,7 +69,8 @@ export function UserManagementPanel() {
   useEffect(() => {
     const run = async () => {
       try {
-        const data = await fetchUsers("", "ALL");
+        const data = await fetchUsers("", "ALL", "ALL", "ALL");
+        setTotalUsersCount(data.length);
         setUsers(data);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Failed to load users");
@@ -188,8 +208,8 @@ export function UserManagementPanel() {
   };
 
   return (
-    <SectionCard title="User Management" subtitle="Search by username, filter by status, manage role and character data">
-      <div className="mb-3 grid gap-2 md:grid-cols-3">
+    <SectionCard title="User Management" subtitle="Search by username, filter by status/role/build, manage role and character data">
+      <div className="mb-3 grid gap-2 md:grid-cols-5">
         <input
           className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
           placeholder="Search username"
@@ -207,14 +227,45 @@ export function UserManagementPanel() {
             <SelectItem value="REJECTED">REJECT</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={role} onValueChange={(value) => setRole(value as "ALL" | UserRole)}>
+          <SelectTrigger className="rounded-xl">
+            <SelectValue placeholder="All Role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Role</SelectItem>
+            <SelectItem value="MEMBER">MEMBER</SelectItem>
+            <SelectItem value="ADMIN">ADMIN</SelectItem>
+            <SelectItem value="SUPER_ADMIN">SUPER_ADMIN</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={build} onValueChange={setBuild} disabled={isLoadingBuildOptions}>
+          <SelectTrigger className="rounded-xl">
+            <SelectValue placeholder="All Build" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Build</SelectItem>
+            {buildOptions.map((option, index) => (
+              <SelectItem key={`${option.label}-${option.color}-${index}`} value={option.label}>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: option.color }} />
+                  {option.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <button
           type="button"
-          onClick={() => void loadUsers(search, status)}
+          onClick={() => void loadUsers(search, status, role, build)}
           className="rounded-xl bg-[#f5c548] px-4 py-2 text-sm font-semibold text-slate-950"
         >
           Run Search
         </button>
       </div>
+
+      <p className="mb-3 text-sm text-slate-300">
+        Total users: <span className="font-semibold text-slate-100">{totalUsersCount}</span> • Filtered: <span className="font-semibold text-slate-100">{users.length}</span>
+      </p>
 
       {message ? <p className="mb-3 text-sm text-slate-300">{message}</p> : null}
 

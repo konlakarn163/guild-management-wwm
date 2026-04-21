@@ -4,6 +4,8 @@ import type { UserRole, UserStatus } from "../types/auth.js";
 
 export interface UserFilter {
   status?: UserStatus;
+  role?: UserRole;
+  build?: string;
   search?: string;
 }
 
@@ -16,6 +18,14 @@ export const usersService = {
 
     if (filter.status) {
       query = query.eq("status", filter.status);
+    }
+
+    if (filter.role) {
+      query = query.eq("role", filter.role);
+    }
+
+    if (filter.build) {
+      query = query.eq("build", filter.build);
     }
 
     if (filter.search) {

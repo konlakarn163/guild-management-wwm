@@ -9,6 +9,8 @@ const envSchema = z.object({
     SUPABASE_ANON_KEY: z.string().min(1),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     SUPABASE_JWT_SECRET: z.string().min(1),
+    DISCORD_WEBHOOK_URL: z.string().url().optional(),
+    DISCORD_NOTIFY_ROLE_ID: z.string().min(1).optional(),
 });
 const parsedEnv = envSchema.safeParse(process.env);
 if (!parsedEnv.success) {

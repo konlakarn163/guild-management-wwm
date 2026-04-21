@@ -1,6 +1,7 @@
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { GuildSettingsForm } from "@/components/admin/guild-settings-form";
 import { UserManagementPanel } from "@/components/admin/user-management-panel";
+import { WarRegistrationManager } from "@/components/admin/war-registration-manager";
 import { CornerWidget } from "../../components/public/corner-widget";
 import { FloatingNavbar } from "../../components/public/floating-navbar";
 import { apiFetch } from "@/lib/api";
@@ -38,6 +39,7 @@ export default async function AdminPage() {
         </header>
 
         <UserManagementPanel />
+        <WarRegistrationManager />
         <GuildSettingsForm />
       </main>
     </AuthGuard>

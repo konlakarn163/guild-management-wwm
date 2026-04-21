@@ -8,15 +8,22 @@ const weekSchema = z.object({
 export const teamsController = {
     listTeams: asyncHandler(async (req, res) => {
         const { weekId: rawWeekId } = weekSchema.parse(req.params);
+        const dayId = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().parse(req.query.dayId);
         const weekId = normalizeWeekIdToMonday(rawWeekId);
-        const teams = await teamsService.listTeams(weekId);
+        const teams = await teamsService.listTeams(weekId, dayId);
         res.json(teams);
     }),
     createTeam: asyncHandler(async (req, res) => {
         const { weekId: rawWeekId } = weekSchema.parse(req.params);
         const weekId = normalizeWeekIdToMonday(rawWeekId);
-        const payload = z.object({ name: z.string().min(1).max(64) }).parse(req.body);
-        const team = await teamsService.createTeam(weekId, payload.name);
+        const payload = z
+            .object({
+            name: z.string().min(1).max(64),
+            dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+            registrationWindowId: z.string().uuid().optional(),
+        })
+            .parse(req.body);
+        const team = await teamsService.createTeam(weekId, payload.name, payload.dayId, payload.registrationWindowId);
         res.status(201).json(team);
     }),
     updateMembers: asyncHandler(async (req, res) => {

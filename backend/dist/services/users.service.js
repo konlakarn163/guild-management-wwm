@@ -9,6 +9,12 @@ export const usersService = {
         if (filter.status) {
             query = query.eq("status", filter.status);
         }
+        if (filter.role) {
+            query = query.eq("role", filter.role);
+        }
+        if (filter.build) {
+            query = query.eq("build", filter.build);
+        }
         if (filter.search) {
             query = query.ilike("username", `%${filter.search}%`);
         }

@@ -1,6 +1,6 @@
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const parseIsoDate = (value: string) => {
+const parseIsoDateInternal = (value: string) => {
   if (!ISO_DATE_RE.test(value)) {
     throw new Error("Invalid weekId format");
   }
@@ -29,8 +29,20 @@ const formatIsoDate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+export const parseIsoDate = (value: string) => parseIsoDateInternal(value);
+
+export const formatDateAsIso = (date: Date) => formatIsoDate(date);
+
+export const deriveWeekIdFromDayId = (dayId: string) => normalizeWeekIdToMonday(dayId);
+
+export const isWeekendDayId = (dayId: string) => {
+  const date = parseIsoDate(dayId);
+  const day = date.getUTCDay();
+  return day === 6 || day === 0;
+};
+
 export const normalizeWeekIdToMonday = (weekId: string) => {
-  const date = parseIsoDate(weekId);
+  const date = parseIsoDateInternal(weekId);
   const mondayOffset = (date.getUTCDay() + 6) % 7;
   date.setUTCDate(date.getUTCDate() - mondayOffset);
   return formatIsoDate(date);

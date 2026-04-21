@@ -3,6 +3,8 @@ import { asyncHandler } from "../utils/async-handler.js";
 import { usersService } from "../services/users.service.js";
 const listQuerySchema = z.object({
     status: z.enum(["PENDING", "ACTIVE", "REJECTED"]).optional(),
+    role: z.enum(["MEMBER", "ADMIN", "SUPER_ADMIN"]).optional(),
+    build: z.string().min(1).optional(),
     search: z.string().optional(),
 });
 const updateSchema = z.object({

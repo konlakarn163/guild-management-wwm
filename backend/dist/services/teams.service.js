@@ -1,23 +1,31 @@
 import { supabaseAdmin } from "../lib/supabase.js";
 import { HttpError } from "../utils/http-error.js";
 export const teamsService = {
-    async listTeams(weekId) {
-        const { data, error } = await supabaseAdmin
+    async listTeams(weekId, dayId) {
+        let query = supabaseAdmin
             .from("teams")
-            .select("id, week_id, name, is_locked, team_members(id, user_id)")
+            .select("id, week_id, day_id, registration_window_id, name, is_locked, team_members(id, user_id)")
             .eq("week_id", weekId)
             .order("created_at", { ascending: true });
+        if (dayId) {
+            query = query.eq("day_id", dayId);
+        }
+        const { data, error } = await query;
         if (error) {
             throw new HttpError(500, error.message);
         }
         return data;
     },
-    async createTeam(weekId, name) {
-        const { data: existing, error: existingError } = await supabaseAdmin
+    async createTeam(weekId, name, dayId, registrationWindowId) {
+        let existingQuery = supabaseAdmin
             .from("teams")
-            .select("id, week_id, name, is_locked")
+            .select("id, week_id, day_id, registration_window_id, name, is_locked")
             .eq("week_id", weekId)
-            .eq("name", name)
+            .eq("name", name);
+        if (dayId) {
+            existingQuery = existingQuery.eq("day_id", dayId);
+        }
+        const { data: existing, error: existingError } = await existingQuery
             .order("created_at", { ascending: true })
             .limit(1)
             .maybeSingle();
@@ -29,8 +37,8 @@ export const teamsService = {
         }
         const { data, error } = await supabaseAdmin
             .from("teams")
-            .insert({ week_id: weekId, name })
-            .select("id, week_id, name, is_locked")
+            .insert({ week_id: weekId, day_id: dayId ?? null, registration_window_id: registrationWindowId ?? null, name })
+            .select("id, week_id, day_id, registration_window_id, name, is_locked")
             .single();
         if (error) {
             throw new HttpError(400, error.message);

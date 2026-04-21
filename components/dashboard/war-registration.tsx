@@ -9,8 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, getCurrentUser } from "@/lib/client-auth";
 import { getRealtimeSocket } from "@/lib/realtime";
-import type { BuildOption, GuildWarRegistration, UserRow } from "@/lib/types";
-import { getCurrentWeekId } from "@/lib/week-id";
+import type { BuildOption, GuildWarRegistration, OpenGuildWarRegistrationResponse, UserRow } from "@/lib/types";
 
 interface WarRegistrant {
   id: string;
@@ -39,15 +38,19 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
   const [_message, setMessage] = useState<string | null>(null);
   const [isLoadingRegistration, setIsLoadingRegistration] = useState(true);
   const [isLoadingActiveUsers, setIsLoadingActiveUsers] = useState(false);
-  const weekId = useMemo(() => getCurrentWeekId(), []);
+  const [openWindow, setOpenWindow] = useState<OpenGuildWarRegistrationResponse["window"]>(null);
+  const weekId = openWindow?.week_id ?? null;
+  const dayId = openWindow?.day_id ?? null;
+
   const weekRangeLabel = useMemo(() => {
+    if (!weekId) return null;
     const [yearText, monthText, dayText] = weekId.split("-");
     const start = new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText)));
     start.setUTCDate(start.getUTCDate() + 6);
     const endYear = start.getUTCFullYear();
     const endMonth = String(start.getUTCMonth() + 1).padStart(2, "0");
     const endDay = String(start.getUTCDate()).padStart(2, "0");
-    return `${weekId} - ${endYear}-${endMonth}-${endDay}`;
+    return `${weekId} — ${endYear}-${endMonth}-${endDay}`;
   }, [weekId]);
 
   const fetchRegistrationData = useCallback(async () => {
@@ -57,19 +60,21 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
     }
 
     const me = await getCurrentUser();
-    const list = await apiFetch<GuildWarRegistration[]>(`/api/guild-war/registrations/${weekId}`, { token });
+    const response = await apiFetch<OpenGuildWarRegistrationResponse>("/api/guild-war/registrations/open", { token });
+
+    setOpenWindow(response.window);
 
     return {
-      mapped: list.map((item) => ({
+      mapped: response.registrations.map((item) => ({
         id: item.id,
         characterName: item.users?.character_name ?? "Unknown Character",
         discordName: item.users?.username ?? "Unknown",
         discordId: item.users?.discord_id ?? "-",
         build: item.users?.build ?? "-",
       })),
-      isRegistered: Boolean(me && list.some((item) => item.user_id === me.id)),
+      isRegistered: Boolean(me && response.registrations.some((item) => item.user_id === me.id)),
     };
-  }, [weekId]);
+  }, []);
 
   useEffect(() => {
     const loadBuildOptions = async () => {
@@ -122,10 +127,12 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
   useEffect(() => {
     const socket = getRealtimeSocket();
-    socket.emit("guildWar:joinWeek", weekId);
+    if (weekId) {
+      socket.emit("guildWar:joinWeek", weekId);
+    }
 
     const onRegistrationsUpdated = (payload: { weekId: string }) => {
-      if (payload.weekId !== weekId) {
+      if (weekId && payload.weekId !== weekId) {
         return;
       }
 
@@ -136,7 +143,9 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
     return () => {
       socket.off("guildWar:registrationsUpdated", onRegistrationsUpdated);
-      socket.emit("guildWar:leaveWeek", weekId);
+      if (weekId) {
+        socket.emit("guildWar:leaveWeek", weekId);
+      }
     };
   }, [weekId]);
 
@@ -179,7 +188,6 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
       await apiFetch("/api/guild-war/registrations", {
         method: "POST",
         token,
-        body: JSON.stringify({ weekId }),
       });
 
       setMessage("Registered successfully");
@@ -208,7 +216,6 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
       await apiFetch("/api/guild-war/registrations/reserve", {
         method: "POST",
         token,
-        body: JSON.stringify({ weekId }),
       });
 
       setMessage("Registered to reserve successfully");
@@ -234,7 +241,7 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
         return;
       }
 
-      await apiFetch(`/api/guild-war/registrations/${weekId}`, {
+      await apiFetch("/api/guild-war/registrations/open", {
         method: "DELETE",
         token,
       });
@@ -271,7 +278,7 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
       await apiFetch("/api/guild-war/registrations/admin", {
         method: "POST",
         token,
-        body: JSON.stringify({ weekId, userId: selectedUserId }),
+        body: JSON.stringify({ userId: selectedUserId }),
       });
 
       const selected = activeUsers.find((user) => user.id === selectedUserId);
@@ -293,7 +300,14 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
   const isRegisterActionDisabled = isSubmitting || registered;
 
   return (
-    <SectionCard title="Guild War Registration" subtitle={`Week: ${weekRangeLabel}`}>
+    <SectionCard
+      title="Guild War Registration"
+      subtitle={
+        openWindow && dayId && weekRangeLabel
+          ? `Day: ${dayId}  •  Week: ${weekRangeLabel}`
+          : "No registration window is currently open"
+      }
+    >
       {isLoadingRegistration ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -302,6 +316,8 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
             <Skeleton className="h-4 w-40" />
           </div>
         </div>
+      ) : !openWindow ? (
+        <p className="text-sm text-slate-400">Registration is currently closed. Please wait for an admin to open a window.</p>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           <Button

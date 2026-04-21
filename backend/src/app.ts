@@ -14,9 +14,13 @@ import { usersRouter } from "./routes/users.route.js";
 
 export const app = express();
 
+const normalizeOrigin = (origin: string) => origin.trim().replace(/\/$/, "");
+
 const allowedOrigins = env.FRONTEND_ORIGIN.split(",")
-  .map((origin) => origin.trim())
+  .map(normalizeOrigin)
   .filter((origin) => origin.length > 0);
+
+const localDevOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 const corsOptions: cors.CorsOptions = {
   origin(origin, callback) {
@@ -26,7 +30,14 @@ const corsOptions: cors.CorsOptions = {
       return;
     }
 
-    if (allowedOrigins.includes(origin)) {
+    const normalizedOrigin = normalizeOrigin(origin);
+
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      callback(null, true);
+      return;
+    }
+
+    if (env.NODE_ENV === "development" && localDevOriginPattern.test(normalizedOrigin)) {
       callback(null, true);
       return;
     }
@@ -35,7 +46,6 @@ const corsOptions: cors.CorsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
   optionsSuccessStatus: 204,
 };
 

@@ -75,14 +75,29 @@ create table if not exists public.users (
 create table if not exists public.guild_war_registrations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
+  day_id date,
   week_id date not null,
   created_at timestamptz not null default now(),
-  unique (user_id, week_id)
+  unique (user_id, day_id)
+);
+
+create table if not exists public.guild_war_registration_windows (
+  id uuid primary key default gen_random_uuid(),
+  day_id date not null unique,
+  week_id date not null,
+  is_open boolean not null default false,
+  created_by uuid references public.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint guild_war_registration_windows_day_weekend_check
+    check (extract(isodow from day_id) in (6, 7))
 );
 
 create table if not exists public.teams (
   id uuid primary key default gen_random_uuid(),
   week_id date not null,
+  day_id date,
+  registration_window_id uuid references public.guild_war_registration_windows(id) on delete set null,
   name text not null,
   is_locked boolean not null default false,
   created_at timestamptz not null default now()
@@ -105,10 +120,47 @@ create table if not exists public.map_strategies (
   updated_at timestamptz not null default now()
 );
 
+alter table public.guild_war_registrations
+  add column if not exists day_id date;
+
+alter table public.teams
+  add column if not exists day_id date,
+  add column if not exists registration_window_id uuid;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'teams_registration_window_id_fkey'
+  ) then
+    alter table public.teams
+      add constraint teams_registration_window_id_fkey
+      foreign key (registration_window_id)
+      references public.guild_war_registration_windows(id)
+      on delete set null;
+  end if;
+end $$;
+
+alter table public.guild_war_registrations
+  drop constraint if exists guild_war_registrations_user_id_week_id_key;
+
+create unique index if not exists idx_gwr_unique_user_day
+  on public.guild_war_registrations(user_id, day_id)
+  where day_id is not null;
+
+create unique index if not exists idx_gwrw_single_open
+  on public.guild_war_registration_windows(is_open)
+  where is_open = true;
+
 create index if not exists idx_users_status on public.users(status);
 create index if not exists idx_users_username on public.users(username);
 create index if not exists idx_reg_week on public.guild_war_registrations(week_id);
+create index if not exists idx_reg_day on public.guild_war_registrations(day_id);
+create index if not exists idx_windows_day on public.guild_war_registration_windows(day_id);
+create index if not exists idx_windows_week on public.guild_war_registration_windows(week_id);
 create index if not exists idx_teams_week on public.teams(week_id);
+create index if not exists idx_teams_day on public.teams(day_id);
 
 -- ============================================================
 -- TRIGGER: auto-create user profile row on Discord signup
@@ -159,13 +211,14 @@ $$;
 -- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
-alter table public.guild_settings           enable row level security;
-alter table public.build_options            enable row level security;
-alter table public.users                    enable row level security;
-alter table public.guild_war_registrations  enable row level security;
-alter table public.teams                    enable row level security;
-alter table public.team_members             enable row level security;
-alter table public.map_strategies           enable row level security;
+alter table public.guild_settings                    enable row level security;
+alter table public.build_options                     enable row level security;
+alter table public.users                             enable row level security;
+alter table public.guild_war_registrations           enable row level security;
+alter table public.guild_war_registration_windows    enable row level security;
+alter table public.teams                             enable row level security;
+alter table public.team_members                      enable row level security;
+alter table public.map_strategies                    enable row level security;
 
 -- ---- build_options ----
 drop policy if exists "Public can read build options" on public.build_options;
@@ -248,6 +301,31 @@ create policy "Super admins can delete users"
   on public.users for delete
   to authenticated
   using (public.current_user_role() = 'SUPER_ADMIN');
+
+-- ---- guild_war_registration_windows ----
+drop policy if exists "Authenticated users can view war windows" on public.guild_war_registration_windows;
+create policy "Authenticated users can view war windows"
+  on public.guild_war_registration_windows for select
+  to authenticated
+  using (true);
+
+drop policy if exists "Admins can create war windows" on public.guild_war_registration_windows;
+create policy "Admins can create war windows"
+  on public.guild_war_registration_windows for insert
+  to authenticated
+  with check (public.current_user_role() in ('ADMIN', 'SUPER_ADMIN'));
+
+drop policy if exists "Admins can update war windows" on public.guild_war_registration_windows;
+create policy "Admins can update war windows"
+  on public.guild_war_registration_windows for update
+  to authenticated
+  using (public.current_user_role() in ('ADMIN', 'SUPER_ADMIN'));
+
+drop policy if exists "Admins can delete war windows" on public.guild_war_registration_windows;
+create policy "Admins can delete war windows"
+  on public.guild_war_registration_windows for delete
+  to authenticated
+  using (public.current_user_role() in ('ADMIN', 'SUPER_ADMIN'));
 
 -- ---- guild_war_registrations ----
 drop policy if exists "Members see own registrations; admins see all" on public.guild_war_registrations;

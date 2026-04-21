@@ -12,9 +12,11 @@ import { publicRouter } from "./routes/public.route.js";
 import { teamsRouter } from "./routes/teams.route.js";
 import { usersRouter } from "./routes/users.route.js";
 export const app = express();
+const normalizeOrigin = (origin) => origin.trim().replace(/\/$/, "");
 const allowedOrigins = env.FRONTEND_ORIGIN.split(",")
-    .map((origin) => origin.trim())
+    .map(normalizeOrigin)
     .filter((origin) => origin.length > 0);
+const localDevOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const corsOptions = {
     origin(origin, callback) {
         // Allow server-to-server calls and non-browser tools that don't send Origin.
@@ -22,7 +24,12 @@ const corsOptions = {
             callback(null, true);
             return;
         }
-        if (allowedOrigins.includes(origin)) {
+        const normalizedOrigin = normalizeOrigin(origin);
+        if (allowedOrigins.includes(normalizedOrigin)) {
+            callback(null, true);
+            return;
+        }
+        if (env.NODE_ENV === "development" && localDevOriginPattern.test(normalizedOrigin)) {
             callback(null, true);
             return;
         }
@@ -30,7 +37,6 @@ const corsOptions = {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
     optionsSuccessStatus: 204,
 };
 app.use(cors(corsOptions));
