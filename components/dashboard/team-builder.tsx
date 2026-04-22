@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Shield, Swords } from "lucide-react";
+import { Shield, Swords, ExternalLink } from "lucide-react";
 import { toast } from "react-toastify";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { apiFetch } from "@/lib/api";
@@ -584,6 +585,17 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
         canDrag
           ? "Click a member to open popover and move between Pool / Team 1 / Team 2 / Reserve."
           : "Read-only mode. Only ADMIN/SUPER_ADMIN can move and arrange teams."
+      }
+      action={
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => window.open("https://gvgmapwwm.vcross.gg/", "_blank")}
+          className="rounded-xl"
+        >
+          <ExternalLink className="h-4 w-4" />
+          View Map
+        </Button>
       }
     >
       <div className="mb-4">

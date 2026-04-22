@@ -4,11 +4,12 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 interface SectionCardProps extends ComponentPropsWithoutRef<"section"> {
   title: string;
   subtitle?: string;
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }
 
-export function SectionCard({ title, subtitle, children, className, ...props }: SectionCardProps) {
+export function SectionCard({ title, subtitle, action, children, className, ...props }: SectionCardProps) {
   return (
     <section
       {...props}
@@ -18,7 +19,10 @@ export function SectionCard({ title, subtitle, children, className, ...props }: 
       )}
     >
       <header className="mb-5 flex flex-col gap-2 border-b border-amber-100/10 pb-4">
-        <h3 className="text-[1.55rem] font-bold tracking-tight text-slate-100">{title}</h3>
+        <div className="flex items-center justify-between gap-4">
+          <h3 className="text-[1.55rem] font-bold tracking-tight text-slate-100">{title}</h3>
+          {action}
+        </div>
         {subtitle ? <p className="max-w-2xl text-sm leading-6 text-slate-300/85">{subtitle}</p> : null}
       </header>
       {children}
