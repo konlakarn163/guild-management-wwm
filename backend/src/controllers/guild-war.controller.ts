@@ -19,6 +19,11 @@ const createWindowSchema = z.object({
   dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+const sendCustomNoticeSchema = z.object({
+  message: z.string().min(1).max(4000),
+  mentionRole: z.boolean(),
+});
+
 const windowIdSchema = z.object({
   id: z.string().uuid(),
 });
@@ -219,5 +224,12 @@ export const guildWarController = {
       userId: req.authUser.id,
     });
     res.status(204).send();
+  }),
+
+  sendCustomNotice: asyncHandler(async (req: Request, res: Response) => {
+    assertAdmin(req);
+    const payload = sendCustomNoticeSchema.parse(req.body);
+    await discordNotifierService.sendCustomNotice(payload.message, payload.mentionRole);
+    res.json({ success: true });
   }),
 };

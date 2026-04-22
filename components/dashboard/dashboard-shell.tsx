@@ -41,7 +41,7 @@ export function DashboardShell() {
     void loadProfile();
   }, []);
 
-  const isAdmin = profile?.role === "ADMIN" || profile?.role === "SUPER_ADMIN";
+  const isSuperAdmin = profile?.role === "SUPER_ADMIN";
   const isActive = profile?.status === "ACTIVE";
 
   return (
@@ -65,8 +65,8 @@ export function DashboardShell() {
 
       {isActive ? (
         <>
-          <WarRegistration canManageAll={Boolean(isAdmin)} />
-          <TeamBuilder canDrag={Boolean(isAdmin)} />
+          <WarRegistration canManageAll={Boolean(isSuperAdmin)} />
+          <TeamBuilder canDrag={Boolean(isSuperAdmin)} />
           {/* {isAdmin ? <AdminApprovals /> : null} */}
         </>
       ) : null}

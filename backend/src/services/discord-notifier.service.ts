@@ -78,4 +78,16 @@ export const discordNotifierService = {
 
     await postDiscordMessage(content);
   },
+
+  async sendCustomNotice(
+    message: string,
+    mentionRole: boolean,
+  ): Promise<void> {
+    const mentionPrefix = mentionRole && env.DISCORD_NOTIFY_ROLE_ID
+      ? `<@&${env.DISCORD_NOTIFY_ROLE_ID}> `
+      : "";
+
+    const content = mentionPrefix + message;
+    await postDiscordMessage(content);
+  },
 };

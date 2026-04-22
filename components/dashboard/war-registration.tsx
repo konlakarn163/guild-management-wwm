@@ -40,6 +40,7 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
   const [isLoadingRegistration, setIsLoadingRegistration] = useState(true);
   const [isLoadingActiveUsers, setIsLoadingActiveUsers] = useState(false);
   const [openWindow, setOpenWindow] = useState<OpenGuildWarRegistrationResponse["window"]>(null);
+
   const weekId = openWindow?.week_id ?? null;
   const dayId = openWindow?.day_id ?? null;
 
@@ -287,6 +288,8 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
     }
   };
 
+
+
   const getBuildColor = (build: string) => {
     return buildOptions.find((item) => item.label === build)?.color ?? "#94a3b8";
   };
@@ -387,6 +390,8 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
           </div>
         </div>
       ) : null}
+
+
 
       {/* <ul className="mt-4 space-y-2">
         {registrants.map((user) => (
