@@ -23,10 +23,10 @@ export const initSocketServer = (server) => {
             socket.leave(`guildWar:week:${weekId}`);
         });
         socket.on("guildWar:teamMoved", (payload) => {
-            if (!payload || !isWeekId(payload.weekId)) {
+            if (!payload || !isWeekId(payload.weekId) || !io) {
                 return;
             }
-            socket.to(`guildWar:week:${payload.weekId}`).emit("guildWar:teamMoved", payload);
+            io.to(`guildWar:week:${payload.weekId}`).emit("guildWar:teamMoved", payload);
         });
     });
     return io;

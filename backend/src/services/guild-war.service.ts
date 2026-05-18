@@ -13,10 +13,10 @@ interface RegistrationWindow {
 
 interface TeamRow {
   id: string;
-  week_id: string;
-  day_id: string | null;
-  registration_window_id: string | null;
   name: string;
+  description: string | null;
+  color: string | null;
+  team_type: "atk" | "def" | "other" | null;
   is_locked: boolean;
   team_members?: Array<{
     id: string;
@@ -24,11 +24,10 @@ interface TeamRow {
   }>;
 }
 
-async function listTeamsForWindow(window: RegistrationWindow) {
+async function listTeamsForWindow() {
   const { data, error } = await supabaseAdmin
     .from("teams")
-    .select("id, week_id, day_id, registration_window_id, name, is_locked, team_members(id, user_id)")
-    .or(`registration_window_id.eq.${window.id},day_id.eq.${window.day_id}`)
+    .select("id, name, description, color, team_type, is_locked, team_members(id, user_id)")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -39,23 +38,7 @@ async function listTeamsForWindow(window: RegistrationWindow) {
 }
 
 async function deleteTeamsForWindow(window: RegistrationWindow) {
-  const teams = await listTeamsForWindow(window);
-  const teamIds = [...new Set(teams.map((team) => team.id))];
-
-  if (teamIds.length === 0) {
-    return { deletedTeamCount: 0 };
-  }
-
-  const { error: deleteTeamsError, count } = await supabaseAdmin
-    .from("teams")
-    .delete({ count: "exact" })
-    .in("id", teamIds);
-
-  if (deleteTeamsError) {
-    throw new HttpError(500, deleteTeamsError.message);
-  }
-
-  return { deletedTeamCount: count ?? teamIds.length };
+  return { deletedTeamCount: 0 };
 }
 
 async function assertActiveUser(userId: string) {
@@ -78,11 +61,10 @@ async function assertActiveUser(userId: string) {
   }
 }
 
-async function clearTeamMembershipForDay(userId: string, dayId: string, weekId: string) {
+async function clearTeamMembership(userId: string) {
   const { data: teams, error: teamsError } = await supabaseAdmin
     .from("teams")
-    .select("id")
-    .or(`day_id.eq.${dayId},and(day_id.is.null,week_id.eq.${weekId})`);
+    .select("id");
 
   if (teamsError) {
     throw new HttpError(500, teamsError.message);
@@ -212,7 +194,7 @@ export const guildWarService = {
 
     const [registrations, teams] = await Promise.all([
       this.listRegistrationsByDay(window.day_id),
-      listTeamsForWindow(window as RegistrationWindow),
+      listTeamsForWindow(),
     ]);
 
     return {
@@ -420,7 +402,7 @@ export const guildWarService = {
     await assertActiveUser(userId);
 
     const openWindow = await getRequiredOpenWindow();
-    await clearTeamMembershipForDay(userId, openWindow.day_id, openWindow.week_id);
+    await clearTeamMembership(userId);
 
     return upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
   },
@@ -433,21 +415,23 @@ export const guildWarService = {
 
     const { data: teams, error: teamsError } = await supabaseAdmin
       .from("teams")
-      .select("id, name")
-      .eq("week_id", openWindow.week_id)
-      .eq("day_id", openWindow.day_id)
+      .select("id, name, description, color, team_type")
       .order("created_at", { ascending: true });
 
     if (teamsError) {
       throw new HttpError(500, teamsError.message);
     }
 
-    let reserveTeamId = teams.find((team) => team.name === "Reserve")?.id;
+    let reserveTeamId = (teams as Array<{ id: string; name: string }>).find((team) => team.name === "Reserve")?.id;
 
     if (!reserveTeamId) {
       const { data: createdTeam, error: createTeamError } = await supabaseAdmin
         .from("teams")
-        .insert({ week_id: openWindow.week_id, day_id: openWindow.day_id, name: "Reserve", registration_window_id: openWindow.id })
+        .insert({
+          name: "Reserve",
+          description: "Reserve team",
+          team_type: "other",
+        })
         .select("id")
         .single();
 
@@ -458,7 +442,7 @@ export const guildWarService = {
       reserveTeamId = createdTeam.id;
     }
 
-    await clearTeamMembershipForDay(userId, openWindow.day_id, openWindow.week_id);
+    await clearTeamMembership(userId);
 
     const { error: reserveMembershipError } = await supabaseAdmin
       .from("team_members")
@@ -475,14 +459,14 @@ export const guildWarService = {
     await assertActiveUser(userId);
 
     const openWindow = await getRequiredOpenWindow();
-    await clearTeamMembershipForDay(userId, openWindow.day_id, openWindow.week_id);
+    await clearTeamMembership(userId);
 
     return upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
   },
 
   async cancel(userId: string) {
     const openWindow = await getRequiredOpenWindow();
-    await clearTeamMembershipForDay(userId, openWindow.day_id, openWindow.week_id);
+    await clearTeamMembership(userId);
 
     const { error } = await supabaseAdmin
       .from("guild_war_registrations")

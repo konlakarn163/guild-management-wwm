@@ -4,6 +4,11 @@ import { teamsController } from "../controllers/teams.controller.js";
 
 export const teamsRouter = Router();
 
+teamsRouter.get("/details/:teamId", teamsController.getTeam);
+teamsRouter.get("/", teamsController.listTeams);
 teamsRouter.get("/:weekId", teamsController.listTeams);
+teamsRouter.post("/", requireRole("ADMIN", "SUPER_ADMIN"), teamsController.createTeam);
 teamsRouter.post("/:weekId", requireRole("ADMIN", "SUPER_ADMIN"), teamsController.createTeam);
+teamsRouter.put("/:teamId", requireRole("ADMIN", "SUPER_ADMIN"), teamsController.updateTeam);
+teamsRouter.delete("/:teamId", requireRole("ADMIN", "SUPER_ADMIN"), teamsController.deleteTeam);
 teamsRouter.put("/:teamId/members", requireRole("ADMIN", "SUPER_ADMIN"), teamsController.updateMembers);

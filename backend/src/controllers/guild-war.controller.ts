@@ -151,13 +151,17 @@ export const guildWarController = {
     const registration = await guildWarService.registerToReserve(req.authUser.id);
     const openWindow = await guildWarService.getOpenRegistrationWindow();
     if (openWindow) {
-      getSocketServer().to(`guildWar:week:${openWindow.week_id}`).emit("guildWar:registrationsUpdated", {
+      const io = getSocketServer();
+      const roomId = `guildWar:week:${openWindow.week_id}`;
+      
+      io.to(roomId).emit("guildWar:registrationsUpdated", {
         weekId: openWindow.week_id,
         dayId: openWindow.day_id,
         action: "register-reserve",
         userId: req.authUser.id,
       });
-      getSocketServer().to(`guildWar:week:${openWindow.week_id}`).emit("guildWar:teamMoved", {
+      
+      io.to(roomId).emit("guildWar:teamMoved", {
         weekId: openWindow.week_id,
         memberKey: req.authUser.id,
         targetZone: "Reserve",

@@ -56,4 +56,11 @@ export const discordNotifierService = {
         ].join("\n");
         await postDiscordMessage(content);
     },
+    async sendCustomNotice(message, mentionRole) {
+        const mentionPrefix = mentionRole && env.DISCORD_NOTIFY_ROLE_ID
+            ? `<@&${env.DISCORD_NOTIFY_ROLE_ID}> `
+            : "";
+        const content = mentionPrefix + message;
+        await postDiscordMessage(content);
+    },
 };

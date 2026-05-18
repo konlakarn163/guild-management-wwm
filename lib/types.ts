@@ -46,12 +46,14 @@ export interface GuildWarTeamMemberRef {
   user_id: string;
 }
 
+export type GuildWarTeamType = "atk" | "def" | "other";
+
 export interface GuildWarTeam {
   id: string;
-  week_id: string;
-  day_id?: string | null;
-  registration_window_id?: string | null;
   name: string;
+  description?: string | null;
+  color?: string | null;
+  team_type?: GuildWarTeamType | null;
   is_locked?: boolean;
   team_members?: GuildWarTeamMemberRef[];
 }

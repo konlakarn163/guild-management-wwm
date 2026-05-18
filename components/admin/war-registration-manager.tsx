@@ -15,6 +15,8 @@ import type {
   GuildWarRegistration,
   GuildWarRegistrationWindow,
   GuildWarRegistrationWindowDetails,
+  GuildWarTeam,
+  GuildWarTeamType,
 } from "@/lib/types";
 
 interface PublicGuildResponse {
@@ -28,7 +30,15 @@ interface TeamMemberEntry {
   registrationIndex: number;
 }
 
-const TEAM_NAMES = ["Team 1", "Team 2", "Reserve"] as const;
+const getTeamType = (team?: GuildWarTeam | null): GuildWarTeamType => {
+  if (team?.team_type === "atk" || team?.team_type === "def") {
+    return team.team_type;
+  }
+
+  return "other";
+};
+
+const sortTeamsByName = (teams: GuildWarTeam[]) => [...teams].sort((left, right) => left.name.localeCompare(right.name));
 
 function formatDateLabel(isoDate: string) {
   const [y, m, d] = isoDate.split("-").map(Number);
@@ -62,17 +72,32 @@ function formatPickerDate(date?: Date) {
 
 function RegistrationGroup({
   title,
+  description,
+  color,
   members,
   getBuildColor,
 }: {
   title: string;
+  description?: string | null;
+  color?: string | null;
   members: TeamMemberEntry[];
   getBuildColor: (build: string) => string;
 }) {
+  const accentColor = String(color ?? "").trim();
+
   return (
-    <div className="rounded-xl border border-slate-700/70 bg-slate-950/70 p-4">
+    <div
+      className="rounded-xl border border-slate-700/70 bg-slate-950/70 p-4"
+      style={accentColor ? { borderColor: `${accentColor}55`, backgroundColor: `${accentColor}14` } : undefined}
+    >
       <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-100">{title}</p>
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+            {accentColor ? <span className="h-3 w-3 rounded-full" style={{ backgroundColor: accentColor }} /> : null}
+            <span className="truncate">{title}</span>
+          </p>
+          {description ? <p className="mt-1 text-xs text-slate-400">{description}</p> : null}
+        </div>
         <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">{members.length}</span>
       </div>
 
@@ -335,17 +360,11 @@ export function WarRegistrationManager() {
       memberByKey.set(key, entry);
     });
 
-    const teams = {
-      "Team 1": [] as TeamMemberEntry[],
-      "Team 2": [] as TeamMemberEntry[],
-      Reserve: [] as TeamMemberEntry[],
-    };
+    const teams: Record<string, TeamMemberEntry[]> = {};
+    const teamMetaByName: Record<string, GuildWarTeam> = {};
 
     selectedWindowDetails.teams.forEach((team) => {
-      if (!TEAM_NAMES.includes(team.name as (typeof TEAM_NAMES)[number])) {
-        return;
-      }
-
+      teamMetaByName[team.name] = team;
       const uniqueMembers = new Map<string, TeamMemberEntry>();
       for (const member of team.team_members ?? []) {
         const existing = memberByKey.get(member.user_id) ?? {
@@ -357,9 +376,7 @@ export function WarRegistrationManager() {
         uniqueMembers.set(existing.key, existing);
       }
 
-      teams[team.name as keyof typeof teams] = [...uniqueMembers.values()].sort(
-        (left, right) => left.registrationIndex - right.registrationIndex,
-      );
+      teams[team.name] = [...uniqueMembers.values()].sort((left, right) => left.registrationIndex - right.registrationIndex);
     });
 
     const assignedKeys = new Set(Object.values(teams).flat().map((member) => member.key));
@@ -370,6 +387,7 @@ export function WarRegistrationManager() {
     return {
       pool,
       teams,
+      teamMetaByName,
       totalRegistrations: uniqueRegistrations.length,
     };
   }, [selectedWindowDetails]);
@@ -533,11 +551,62 @@ export function WarRegistrationManager() {
             </div>
 
             <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-6 py-5">
-              <div className="grid gap-4 xl:grid-cols-2">
+              <div className="grid gap-4">
                 <RegistrationGroup title="Pool" members={groupedDetails.pool} getBuildColor={getBuildColor} />
-                <RegistrationGroup title="Team 1" members={groupedDetails.teams["Team 1"]} getBuildColor={getBuildColor} />
-                <RegistrationGroup title="Team 2" members={groupedDetails.teams["Team 2"]} getBuildColor={getBuildColor} />
-                <RegistrationGroup title="Reserve" members={groupedDetails.teams.Reserve} getBuildColor={getBuildColor} />
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="grid gap-4">
+                    <div className="rounded-xl border border-rose-500/25 bg-rose-950/10 px-4 py-3 text-sm font-bold uppercase tracking-[0.2em] text-rose-200">
+                      ATK
+                    </div>
+                    {sortTeamsByName(selectedWindowDetails.teams.filter((team) => getTeamType(team) === "atk")).map((team) => (
+                      <RegistrationGroup
+                        key={team.id}
+                        title={team.name}
+                        description={team.description}
+                        color={team.color}
+                        members={groupedDetails.teams[team.name] ?? []}
+                        getBuildColor={getBuildColor}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="grid gap-4">
+                    <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 px-4 py-3 text-sm font-bold uppercase tracking-[0.2em] text-cyan-200">
+                      DEF
+                    </div>
+                    {sortTeamsByName(selectedWindowDetails.teams.filter((team) => getTeamType(team) === "def")).map((team) => (
+                      <RegistrationGroup
+                        key={team.id}
+                        title={team.name}
+                        description={team.description}
+                        color={team.color}
+                        members={groupedDetails.teams[team.name] ?? []}
+                        getBuildColor={getBuildColor}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {selectedWindowDetails.teams.some((team) => getTeamType(team) === "other") ? (
+                  <div className="grid gap-4">
+                    <div className="rounded-xl border border-amber-500/25 bg-amber-950/10 px-4 py-3 text-sm font-bold uppercase tracking-[0.2em] text-amber-200">
+                      OTHER
+                    </div>
+                    <div className="grid gap-4 xl:grid-cols-2">
+                      {sortTeamsByName(selectedWindowDetails.teams.filter((team) => getTeamType(team) === "other")).map((team) => (
+                        <RegistrationGroup
+                          key={team.id}
+                          title={team.name}
+                          description={team.description}
+                          color={team.color}
+                          members={groupedDetails.teams[team.name] ?? []}
+                          getBuildColor={getBuildColor}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

@@ -1,39 +1,158 @@
 import { supabaseAdmin } from "../lib/supabase.js";
 import { HttpError } from "../utils/http-error.js";
 
-export const teamsService = {
-  async listTeams(weekId: string, dayId?: string) {
-    let query = supabaseAdmin
-      .from("teams")
-      .select("id, week_id, day_id, registration_window_id, name, is_locked, team_members(id, user_id)")
-      .eq("week_id", weekId)
-      .order("created_at", { ascending: true });
+const RESERVE_TEAM_NAME = "Reserve";
 
-    if (dayId) {
-      query = query.eq("day_id", dayId);
+type TeamListRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  team_type: "atk" | "def" | "other" | null;
+  is_locked: boolean;
+  team_members?: Array<{ id: string; user_id: string }>;
+};
+
+const normalizeTeamName = (name: string) => name.trim().toLowerCase();
+
+function collapseDuplicateTeams(teams: TeamListRow[]) {
+  const byName = new Map<string, TeamListRow>();
+
+  for (const team of teams) {
+    const key = normalizeTeamName(team.name);
+    const existing = byName.get(key);
+
+    if (!existing) {
+      byName.set(key, {
+        ...team,
+        team_members: [...(team.team_members ?? [])],
+      });
+      continue;
     }
 
-    const { data, error } = await query;
+    const mergedMembers = new Map<string, { id: string; user_id: string }>();
+    for (const member of [...(existing.team_members ?? []), ...(team.team_members ?? [])]) {
+      mergedMembers.set(member.user_id, member);
+    }
+
+    byName.set(key, {
+      ...existing,
+      description: existing.description ?? team.description,
+      color: existing.color ?? team.color,
+      team_type: existing.team_type ?? team.team_type,
+      team_members: [...mergedMembers.values()],
+    });
+  }
+
+  return [...byName.values()];
+}
+
+async function ensureReserveTeam() {
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("teams")
+    .select("id")
+    .eq("name", RESERVE_TEAM_NAME)
+    .order("created_at", { ascending: true });
+
+  if (existingError) {
+    throw new HttpError(500, existingError.message);
+  }
+
+  if ((existing ?? []).length > 0) {
+    return;
+  }
+
+  const { error: createError } = await supabaseAdmin.from("teams").insert({
+    name: RESERVE_TEAM_NAME,
+    description: "Reserve team",
+    color: "#f59e0b",
+    team_type: "other",
+  });
+
+  if (createError) {
+    throw new HttpError(400, createError.message);
+  }
+}
+
+async function getTeamById(teamId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("teams")
+    .select("id, name")
+    .eq("id", teamId)
+    .maybeSingle();
+
+  if (error) {
+    throw new HttpError(500, error.message);
+  }
+
+  if (!data) {
+    throw new HttpError(404, "Team not found");
+  }
+
+  return data;
+}
+
+export const teamsService = {
+  async getTeam(teamId: string) {
+    const { data, error } = await supabaseAdmin
+      .from("teams")
+      .select("id, name, description, color, team_type, is_locked, team_members(id, user_id)")
+      .eq("id", teamId)
+      .maybeSingle();
 
     if (error) {
       throw new HttpError(500, error.message);
     }
 
-    return data;
-  },
-
-  async createTeam(weekId: string, name: string, dayId?: string, registrationWindowId?: string) {
-    let existingQuery = supabaseAdmin
-      .from("teams")
-      .select("id, week_id, day_id, registration_window_id, name, is_locked")
-      .eq("week_id", weekId)
-      .eq("name", name);
-
-    if (dayId) {
-      existingQuery = existingQuery.eq("day_id", dayId);
+    if (!data) {
+      throw new HttpError(404, "Team not found");
     }
 
-    const { data: existing, error: existingError } = await existingQuery
+    return {
+      ...data,
+      team_type: (data.team_type ?? "other") as "atk" | "def" | "other",
+    };
+  },
+
+  async listTeams() {
+    await ensureReserveTeam();
+
+    const { data, error } = await supabaseAdmin
+      .from("teams")
+      .select("id, name, description, color, team_type, is_locked, team_members(id, user_id)")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new HttpError(500, error.message);
+    }
+
+    // Normalize team_type: default to 'other' if null
+    const normalized = ((data ?? []) as TeamListRow[]).map((team) => ({
+      ...team,
+      team_type: (team.team_type ?? "other") as "atk" | "def" | "other",
+    }));
+
+    return collapseDuplicateTeams(normalized);
+  },
+
+  async createTeam(
+    name: string,
+    description?: string,
+    color?: string,
+    teamType?: "atk" | "def" | "other",
+  ) {
+    if (normalizeTeamName(name) === normalizeTeamName(RESERVE_TEAM_NAME)) {
+      const reserveTeams = await this.listTeams();
+      const reserveTeam = reserveTeams.find((team) => normalizeTeamName(team.name) === normalizeTeamName(RESERVE_TEAM_NAME));
+      if (reserveTeam) {
+        return reserveTeam;
+      }
+    }
+
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from("teams")
+      .select("id, name, description, color, team_type, is_locked")
+      .eq("name", name)
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
@@ -48,12 +167,85 @@ export const teamsService = {
 
     const { data, error } = await supabaseAdmin
       .from("teams")
-      .insert({ week_id: weekId, day_id: dayId ?? null, registration_window_id: registrationWindowId ?? null, name })
-      .select("id, week_id, day_id, registration_window_id, name, is_locked")
+      .insert({
+        name,
+        description: description ?? null,
+        color: color ?? "#94a3b8",
+        team_type: teamType ?? "other",
+      })
+      .select("id, name, description, color, team_type, is_locked")
       .single();
 
     if (error) {
       throw new HttpError(400, error.message);
+    }
+
+    return data;
+  },
+
+  async updateTeam(teamId: string, payload: { name?: string; description?: string | null; color?: string | null; teamType?: "atk" | "def" | "other" }) {
+    const currentTeam = await getTeamById(teamId);
+
+    if (currentTeam.name === RESERVE_TEAM_NAME && payload.name !== undefined && payload.name !== RESERVE_TEAM_NAME) {
+      throw new HttpError(400, "Reserve team name cannot be changed");
+    }
+
+    const update: Record<string, string | null> = {};
+
+    if (payload.name !== undefined) {
+      update.name = payload.name;
+    }
+
+    if (payload.description !== undefined) {
+      update.description = payload.description;
+    }
+
+    if (payload.color !== undefined) {
+      update.color = payload.color;
+    }
+
+    if (payload.teamType !== undefined) {
+      update.team_type = payload.teamType;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("teams")
+      .update(update)
+      .eq("id", teamId)
+      .select("id, name, description, color, team_type, is_locked")
+      .maybeSingle();
+
+    if (error) {
+      throw new HttpError(400, error.message);
+    }
+
+    if (!data) {
+      throw new HttpError(404, "Team not found");
+    }
+
+    return data;
+  },
+
+  async deleteTeam(teamId: string) {
+    const currentTeam = await getTeamById(teamId);
+
+    if (currentTeam.name === RESERVE_TEAM_NAME) {
+      throw new HttpError(400, "Reserve team cannot be deleted");
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("teams")
+      .delete()
+      .eq("id", teamId)
+      .select("id, name, description, color, team_type, is_locked")
+      .maybeSingle();
+
+    if (error) {
+      throw new HttpError(500, error.message);
+    }
+
+    if (!data) {
+      throw new HttpError(404, "Team not found");
     }
 
     return data;

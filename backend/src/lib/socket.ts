@@ -34,11 +34,11 @@ export const initSocketServer = (server: HttpServer) => {
     socket.on(
       "guildWar:teamMoved",
       (payload: { weekId: string; memberKey: string; targetZone: string }) => {
-        if (!payload || !isWeekId(payload.weekId)) {
+        if (!payload || !isWeekId(payload.weekId) || !io) {
           return;
         }
 
-        socket.to(`guildWar:week:${payload.weekId}`).emit("guildWar:teamMoved", payload);
+        io.to(`guildWar:week:${payload.weekId}`).emit("guildWar:teamMoved", payload);
       },
     );
   });

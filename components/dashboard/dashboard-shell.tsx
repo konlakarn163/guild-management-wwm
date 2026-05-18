@@ -6,9 +6,10 @@ import { ProfileCard } from "@/components/dashboard/profile-card";
 import { TeamBuilder } from "@/components/dashboard/team-builder";
 import { WarRegistration } from "@/components/dashboard/war-registration";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SectionCard } from "@/components/ui/section-card";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/client-auth";
-import type { UserRole, UserStatus } from "@/lib/types";
+import type { UserRole, UserStatus, GuildWarTeam } from "@/lib/types";
 
 interface DashboardProfile {
   role: UserRole;
@@ -19,6 +20,8 @@ export function DashboardShell() {
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [teamsList, setTeamsList] = useState<GuildWarTeam[]>([]);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(true);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -39,6 +42,27 @@ export function DashboardShell() {
     };
 
     void loadProfile();
+  }, []);
+
+  useEffect(() => {
+    const loadTeams = async () => {
+      try {
+        setIsLoadingTeams(true);
+        const token = await getAccessToken();
+        if (!token) {
+          return;
+        }
+
+        const teams = await apiFetch<GuildWarTeam[]>("/api/teams", { token });
+        setTeamsList(teams);
+      } catch (error) {
+        console.error("Failed to load teams:", error);
+      } finally {
+        setIsLoadingTeams(false);
+      }
+    };
+
+    void loadTeams();
   }, []);
 
   const isSuperAdmin = profile?.role === "SUPER_ADMIN";
@@ -62,6 +86,8 @@ export function DashboardShell() {
           Account is pending approval. You can edit profile now; other dashboard features unlock after admin approval.
         </p>
       ) : null}
+
+   
 
       {isActive ? (
         <>

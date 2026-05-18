@@ -14,6 +14,10 @@ const adminRegisterSchema = z.object({
 const createWindowSchema = z.object({
     dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
+const sendCustomNoticeSchema = z.object({
+    message: z.string().min(1).max(4000),
+    mentionRole: z.boolean(),
+});
 const windowIdSchema = z.object({
     id: z.string().uuid(),
 });
@@ -124,13 +128,15 @@ export const guildWarController = {
         const registration = await guildWarService.registerToReserve(req.authUser.id);
         const openWindow = await guildWarService.getOpenRegistrationWindow();
         if (openWindow) {
-            getSocketServer().to(`guildWar:week:${openWindow.week_id}`).emit("guildWar:registrationsUpdated", {
+            const io = getSocketServer();
+            const roomId = `guildWar:week:${openWindow.week_id}`;
+            io.to(roomId).emit("guildWar:registrationsUpdated", {
                 weekId: openWindow.week_id,
                 dayId: openWindow.day_id,
                 action: "register-reserve",
                 userId: req.authUser.id,
             });
-            getSocketServer().to(`guildWar:week:${openWindow.week_id}`).emit("guildWar:teamMoved", {
+            io.to(roomId).emit("guildWar:teamMoved", {
                 weekId: openWindow.week_id,
                 memberKey: req.authUser.id,
                 targetZone: "Reserve",
@@ -187,5 +193,11 @@ export const guildWarController = {
             userId: req.authUser.id,
         });
         res.status(204).send();
+    }),
+    sendCustomNotice: asyncHandler(async (req, res) => {
+        assertAdmin(req);
+        const payload = sendCustomNoticeSchema.parse(req.body);
+        await discordNotifierService.sendCustomNotice(payload.message, payload.mentionRole);
+        res.json({ success: true });
     }),
 };

@@ -8,6 +8,11 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
+do $$ begin
+  create type public.guild_team_type as enum ('atk', 'def', 'other');
+exception when duplicate_object then null;
+end $$;
+
 create table if not exists public.guild_settings (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -95,10 +100,10 @@ create table if not exists public.guild_war_registration_windows (
 
 create table if not exists public.teams (
   id uuid primary key default gen_random_uuid(),
-  week_id date not null,
-  day_id date,
-  registration_window_id uuid references public.guild_war_registration_windows(id) on delete set null,
   name text not null,
+  description text,
+  color text not null default '#94a3b8',
+  team_type public.guild_team_type not null default 'other',
   is_locked boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -124,23 +129,24 @@ alter table public.guild_war_registrations
   add column if not exists day_id date;
 
 alter table public.teams
-  add column if not exists day_id date,
-  add column if not exists registration_window_id uuid;
+  add column if not exists description text,
+  add column if not exists color text not null default '#94a3b8',
+  add column if not exists team_type public.guild_team_type not null default 'other';
 
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conname = 'teams_registration_window_id_fkey'
-  ) then
-    alter table public.teams
-      add constraint teams_registration_window_id_fkey
-      foreign key (registration_window_id)
-      references public.guild_war_registration_windows(id)
-      on delete set null;
-  end if;
-end $$;
+update public.teams
+set team_type = 'other'
+where team_type is null;
+
+alter table public.teams
+  drop constraint if exists teams_registration_window_id_fkey;
+
+drop index if exists idx_teams_week;
+drop index if exists idx_teams_day;
+
+alter table public.teams
+  drop column if exists registration_window_id,
+  drop column if exists day_id,
+  drop column if exists week_id;
 
 alter table public.guild_war_registrations
   drop constraint if exists guild_war_registrations_user_id_week_id_key;
@@ -159,8 +165,6 @@ create index if not exists idx_reg_week on public.guild_war_registrations(week_i
 create index if not exists idx_reg_day on public.guild_war_registrations(day_id);
 create index if not exists idx_windows_day on public.guild_war_registration_windows(day_id);
 create index if not exists idx_windows_week on public.guild_war_registration_windows(week_id);
-create index if not exists idx_teams_week on public.teams(week_id);
-create index if not exists idx_teams_day on public.teams(day_id);
 
 -- ============================================================
 -- TRIGGER: auto-create user profile row on Discord signup

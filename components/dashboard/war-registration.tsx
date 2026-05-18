@@ -129,8 +129,8 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
   useEffect(() => {
     const socket = getRealtimeSocket();
-    const currentWeekId = getCurrentWeekId();
-    socket.emit("guildWar:joinWeek", currentWeekId);
+    const targetWeekId = weekId ?? getCurrentWeekId();
+    socket.emit("guildWar:joinWeek", targetWeekId);
 
     const onRegistrationsUpdated = (_payload: { weekId: string; dayId?: string; action?: string }) => {
       void load();
@@ -140,9 +140,9 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
     return () => {
       socket.off("guildWar:registrationsUpdated", onRegistrationsUpdated);
-      socket.emit("guildWar:leaveWeek", currentWeekId);
+      socket.emit("guildWar:leaveWeek", targetWeekId);
     };
-  }, []);
+  }, [weekId]);
 
   useEffect(() => {
     if (!canManageAll) {
