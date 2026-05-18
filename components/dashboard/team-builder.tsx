@@ -252,6 +252,15 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   const attackTeams = useMemo(() => sortTeamsByName(teamDefinitions.filter((team) => getTeamType(team) === "atk")), [teamDefinitions]);
   const defenseTeams = useMemo(() => sortTeamsByName(teamDefinitions.filter((team) => getTeamType(team) === "def")), [teamDefinitions]);
   const otherTeams = useMemo(() => sortTeamsByName(teamDefinitions.filter((team) => getTeamType(team) === "other")), [teamDefinitions]);
+  const attackRegisteredCount = useMemo(
+    () => attackTeams.reduce((total, team) => total + (state.teams[team.name]?.length ?? 0), 0),
+    [attackTeams, state.teams],
+  );
+  const defenseRegisteredCount = useMemo(
+    () => defenseTeams.reduce((total, team) => total + (state.teams[team.name]?.length ?? 0), 0),
+    [defenseTeams, state.teams],
+  );
+  const attackDefenseRegisteredCount = attackRegisteredCount + defenseRegisteredCount;
 
   const sortByRegistrationOrder = (members: TeamMemberEntry[]) => {
     return [...members].sort((left, right) => left.registrationIndex - right.registrationIndex);
@@ -543,6 +552,20 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
           className="h-10 rounded-xl"
         />
         {isLoadingPool ? <Skeleton className="mt-2 h-3 w-52" /> : null}
+
+        {!isLoadingPool ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-3 py-2 text-sm text-rose-100">
+              <span className="font-semibold">ATK:</span> {attackRegisteredCount}
+            </div>
+            <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-100">
+              <span className="font-semibold">DEF:</span> {defenseRegisteredCount}
+            </div>
+            <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-100">
+              <span className="font-semibold">ATK + DEF:</span> {attackDefenseRegisteredCount}
+            </div>
+          </div>
+        ) : null}
 
       </div>
       {isLoadingPool ? (
