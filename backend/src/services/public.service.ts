@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../lib/supabase.js";
 import { HttpError } from "../utils/http-error.js";
+import { guildWarService } from "./guild-war.service.js";
 
 const ALLOWED_BUILD_COLORS = ["#d65409", "#1253e0", "#167312"] as const;
 const DEFAULT_BUILD_COLOR = "#167312";
@@ -73,5 +74,13 @@ export const publicService = {
           }))
         : DEFAULT_BUILD_OPTIONS,
     };
+  },
+
+  async listOpenRegistrationWindows() {
+    return guildWarService.listOpenRegistrationWindows();
+  },
+
+  async forceRegister(dayId: string, characterName: string, build: string) {
+    return guildWarService.forceRegisterByDay(dayId, characterName, build);
   },
 };

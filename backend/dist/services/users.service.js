@@ -16,7 +16,7 @@ export const usersService = {
             query = query.eq("build", filter.build);
         }
         if (filter.search) {
-            query = query.ilike("username", `%${filter.search}%`);
+            query = query.or(`username.ilike.%${filter.search}%,character_name.ilike.%${filter.search}%`);
         }
         const { data, error } = await query;
         if (error) {

@@ -8,15 +8,21 @@ const teamIdSchema = z.object({
   teamId: z.string().uuid(),
 });
 
+const listQuerySchema = z.object({
+  dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
 export const teamsController = {
   getTeam: asyncHandler(async (req: Request, res: Response) => {
     const { teamId } = teamIdSchema.parse(req.params);
-    const team = await teamsService.getTeam(teamId);
+    const { dayId } = listQuerySchema.parse(req.query);
+    const team = await teamsService.getTeam(teamId, dayId);
     res.json(team);
   }),
 
   listTeams: asyncHandler(async (req: Request, res: Response) => {
-    const teams = await teamsService.listTeams();
+    const { dayId } = listQuerySchema.parse(req.query);
+    const teams = await teamsService.listTeams(dayId);
     res.json(teams);
   }),
 
@@ -65,8 +71,13 @@ export const teamsController = {
 
   updateMembers: asyncHandler(async (req: Request, res: Response) => {
     const { teamId } = teamIdSchema.parse(req.params);
-    const payload = z.object({ userIds: z.array(z.string().uuid()) }).parse(req.body);
-    const members = await teamsService.updateMembers(teamId, payload.userIds);
+    const payload = z
+      .object({
+        dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        registrationIds: z.array(z.string().uuid()),
+      })
+      .parse(req.body);
+    const members = await teamsService.updateMembers(teamId, payload.dayId, payload.registrationIds);
     res.json(members);
   }),
 };

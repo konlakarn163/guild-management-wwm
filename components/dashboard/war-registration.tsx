@@ -9,16 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, getCurrentUser } from "@/lib/client-auth";
 import { getRealtimeSocket } from "@/lib/realtime";
-import type { BuildOption, GuildWarRegistration, OpenGuildWarRegistrationResponse, UserRow } from "@/lib/types";
-import { getCurrentWeekId } from "@/lib/week-id";
-
-interface WarRegistrant {
-  id: string;
-  characterName: string;
-  discordName: string;
-  discordId: string;
-  build: string;
-}
+import type { BuildOption, GuildWarRegistrationWindow, OpenGuildWarRegistrationResponse, UserRow } from "@/lib/types";
 
 interface PublicGuildResponse {
   build_options?: BuildOption[];
@@ -28,32 +19,37 @@ interface WarRegistrationProps {
   canManageAll?: boolean;
 }
 
+const formatDayTab = (dayId: string) => {
+  const [year, month, day] = dayId.split("-");
+  return `${day}/${month}/${year.slice(2)}`;
+};
+
 export function WarRegistration({ canManageAll = false }: WarRegistrationProps) {
-  const [registered, setRegistered] = useState(false);
+  const [selectedDayId, setSelectedDayId] = useState<string>("");
+  const [registeredDayIds, setRegisteredDayIds] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [_registrants, setRegistrants] = useState<WarRegistrant[]>([]);
-  const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
-  const [_expandedRegistrantId, _setExpandedRegistrantId] = useState<string | null>(null);
   const [activeUsers, setActiveUsers] = useState<UserRow[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
-  const [_message, setMessage] = useState<string | null>(null);
+  const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
   const [isLoadingRegistration, setIsLoadingRegistration] = useState(true);
   const [isLoadingActiveUsers, setIsLoadingActiveUsers] = useState(false);
-  const [openWindow, setOpenWindow] = useState<OpenGuildWarRegistrationResponse["window"]>(null);
+  const [openWindows, setOpenWindows] = useState<GuildWarRegistrationWindow[]>([]);
 
-  const weekId = openWindow?.week_id ?? null;
-  const dayId = openWindow?.day_id ?? null;
+  const selectedWindow = useMemo(
+    () => openWindows.find((window) => window.day_id === selectedDayId) ?? null,
+    [openWindows, selectedDayId],
+  );
 
   const weekRangeLabel = useMemo(() => {
-    if (!weekId) return null;
-    const [yearText, monthText, dayText] = weekId.split("-");
+    if (!selectedWindow?.week_id) return null;
+    const [yearText, monthText, dayText] = selectedWindow.week_id.split("-");
     const start = new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText)));
     start.setUTCDate(start.getUTCDate() + 6);
     const endYear = start.getUTCFullYear();
     const endMonth = String(start.getUTCMonth() + 1).padStart(2, "0");
     const endDay = String(start.getUTCDate()).padStart(2, "0");
-    return `${weekId} — ${endYear}-${endMonth}-${endDay}`;
-  }, [weekId]);
+    return `${selectedWindow.week_id} — ${endYear}-${endMonth}-${endDay}`;
+  }, [selectedWindow?.week_id]);
 
   const fetchRegistrationData = useCallback(async () => {
     const token = await getAccessToken();
@@ -63,20 +59,46 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
     const me = await getCurrentUser();
     const response = await apiFetch<OpenGuildWarRegistrationResponse>("/api/guild-war/registrations/open", { token });
+    const windows = response.windows ?? [];
 
-    setOpenWindow(response.window);
+    const myDayIds = new Set<string>();
+    if (me) {
+      for (const window of windows) {
+        const registrations = response.registrationsByDay?.[window.day_id] ?? [];
+        if (registrations.some((item) => item.user_id === me.id)) {
+          myDayIds.add(window.day_id);
+        }
+      }
+    }
 
     return {
-      mapped: response.registrations.map((item) => ({
-        id: item.id,
-        characterName: item.users?.character_name ?? "Unknown Character",
-        discordName: item.users?.username ?? "Unknown",
-        discordId: item.users?.discord_id ?? "-",
-        build: item.users?.build ?? "-",
-      })),
-      isRegistered: Boolean(me && response.registrations.some((item) => item.user_id === me.id)),
+      windows,
+      myDayIds,
     };
   }, []);
+
+  const load = useCallback(async () => {
+    try {
+      const payload = await fetchRegistrationData();
+      if (!payload) {
+        return;
+      }
+
+      setOpenWindows(payload.windows);
+      setRegisteredDayIds(payload.myDayIds);
+      setSelectedDayId((prev) => {
+        if (prev && payload.windows.some((window) => window.day_id === prev)) {
+          return prev;
+        }
+
+        return payload.windows[0]?.day_id ?? "";
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load registrations");
+    } finally {
+      setIsLoadingRegistration(false);
+    }
+  }, [fetchRegistrationData]);
 
   useEffect(() => {
     const loadBuildOptions = async () => {
@@ -91,48 +113,17 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
     void loadBuildOptions();
   }, []);
 
-  const load = async () => {
-    try {
-      const payload = await fetchRegistrationData();
-      if (!payload) {
-        return;
-      }
-
-      setRegistrants(payload.mapped);
-      setRegistered(payload.isRegistered);
-    } finally {
-      setIsLoadingRegistration(false);
-    }
-  };
-
   useEffect(() => {
-    const run = async () => {
-      try {
-        const payload = await fetchRegistrationData();
-        if (!payload) {
-          return;
-        }
-
-        setRegistrants(payload.mapped);
-        setRegistered(payload.isRegistered);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Failed to load registrations";
-        setMessage(errorMessage);
-        toast.error(errorMessage);
-      } finally {
-        setIsLoadingRegistration(false);
-      }
-    };
-
-    void run();
-  }, [fetchRegistrationData]);
+    void load();
+  }, [load]);
 
   useEffect(() => {
     const socket = getRealtimeSocket();
-    const targetWeekId = weekId ?? getCurrentWeekId();
-    socket.emit("guildWar:joinWeek", targetWeekId);
 
-    const onRegistrationsUpdated = (_payload: { weekId: string; dayId?: string; action?: string }) => {
+    const weekIds = [...new Set(openWindows.map((window) => window.week_id))];
+    weekIds.forEach((weekId) => socket.emit("guildWar:joinWeek", weekId));
+
+    const onRegistrationsUpdated = () => {
       void load();
     };
 
@@ -140,9 +131,9 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
     return () => {
       socket.off("guildWar:registrationsUpdated", onRegistrationsUpdated);
-      socket.emit("guildWar:leaveWeek", targetWeekId);
+      weekIds.forEach((weekId) => socket.emit("guildWar:leaveWeek", weekId));
     };
-  }, [weekId]);
+  }, [load, openWindows]);
 
   useEffect(() => {
     if (!canManageAll) {
@@ -160,7 +151,7 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
         const users = await apiFetch<UserRow[]>("/api/users?status=ACTIVE", { token });
         setActiveUsers(users);
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Failed to load active users");
+        toast.error(error instanceof Error ? error.message : "Failed to load active users");
       } finally {
         setIsLoadingActiveUsers(false);
       }
@@ -170,84 +161,87 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
   }, [canManageAll]);
 
   const onRegister = async () => {
+    if (!selectedDayId) {
+      toast.error("Please select registration day");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const token = await getAccessToken();
       if (!token) {
-        const errorMessage = "Please login first";
-        setMessage(errorMessage);
-        toast.error(errorMessage);
+        toast.error("Please login first");
         return;
       }
 
       await apiFetch("/api/guild-war/registrations", {
         method: "POST",
         token,
+        body: JSON.stringify({ dayId: selectedDayId }),
       });
 
-      setMessage("Registered successfully");
       toast.success("Registered successfully");
       await load();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to register";
-      setMessage(errorMessage);
-      toast.error(errorMessage);
+      toast.error(error instanceof Error ? error.message : "Failed to register");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const onRegisterToReserve = async () => {
+    if (!selectedDayId) {
+      toast.error("Please select registration day");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const token = await getAccessToken();
       if (!token) {
-        const errorMessage = "Please login first";
-        setMessage(errorMessage);
-        toast.error(errorMessage);
+        toast.error("Please login first");
         return;
       }
 
       await apiFetch("/api/guild-war/registrations/reserve", {
         method: "POST",
         token,
+        body: JSON.stringify({ dayId: selectedDayId }),
       });
 
-      setMessage("Registered to reserve successfully");
       toast.success("Registered to reserve successfully");
       await load();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to register to reserve";
-      setMessage(errorMessage);
-      toast.error(errorMessage);
+      toast.error(error instanceof Error ? error.message : "Failed to register to reserve");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const onCancel = async () => {
+    if (!selectedDayId) {
+      toast.error("Please select registration day");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const token = await getAccessToken();
       if (!token) {
-        const errorMessage = "Please login first";
-        setMessage(errorMessage);
-        toast.error(errorMessage);
+        toast.error("Please login first");
         return;
       }
 
       await apiFetch("/api/guild-war/registrations/open", {
         method: "DELETE",
         token,
+        body: JSON.stringify({ dayId: selectedDayId }),
       });
 
-      setMessage("Registration canceled");
       toast.success("Registration canceled");
       await load();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to cancel";
-      setMessage(errorMessage);
-      toast.error(errorMessage);
+      toast.error(error instanceof Error ? error.message : "Failed to cancel");
     } finally {
       setIsSubmitting(false);
     }
@@ -255,173 +249,162 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
   const onAdminAdd = async () => {
     if (!selectedUserId) {
-      const errorMessage = "Please select a member";
-      setMessage(errorMessage);
-      toast.error(errorMessage);
+      toast.error("Please select a member");
+      return;
+    }
+
+    if (!selectedDayId) {
+      toast.error("Please select registration day");
       return;
     }
 
     try {
       const token = await getAccessToken();
       if (!token) {
-        const errorMessage = "Please login first";
-        setMessage(errorMessage);
-        toast.error(errorMessage);
+        toast.error("Please login first");
         return;
       }
 
       await apiFetch("/api/guild-war/registrations/admin", {
         method: "POST",
         token,
-        body: JSON.stringify({ userId: selectedUserId }),
+        body: JSON.stringify({ userId: selectedUserId, dayId: selectedDayId }),
       });
 
       const selected = activeUsers.find((user) => user.id === selectedUserId);
-      const successMessage = `Added ${selected?.character_name ?? selected?.username ?? "member"} to registration`;
-      setMessage(successMessage);
-      toast.success(successMessage);
+      toast.success(`Added ${selected?.character_name ?? selected?.username ?? "member"} to registration`);
       await load();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to add member";
-      setMessage(errorMessage);
-      toast.error(errorMessage);
+      toast.error(error instanceof Error ? error.message : "Failed to add member");
     }
   };
-
-
 
   const getBuildColor = (build: string) => {
     return buildOptions.find((item) => item.label === build)?.color ?? "#94a3b8";
   };
 
-  const isRegisterActionDisabled = isSubmitting || registered;
+  const isRegisteredForSelectedDay = Boolean(selectedDayId && registeredDayIds.has(selectedDayId));
+  const isRegisterActionDisabled = isSubmitting || isRegisteredForSelectedDay || !selectedDayId;
 
   return (
     <SectionCard
       title="Guild War Registration"
       subtitle={
-        openWindow && dayId && weekRangeLabel
-          ? `Day: ${dayId}  •  Week: ${weekRangeLabel}`
+        selectedWindow && weekRangeLabel
+          ? `Day: ${selectedWindow.day_id}  •  Week: ${weekRangeLabel}`
           : "No registration window is currently open"
       }
     >
       {isLoadingRegistration ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
+            <Skeleton className="h-9 w-28 rounded-xl" />
+            <Skeleton className="h-9 w-28 rounded-xl" />
+            <Skeleton className="h-9 w-28 rounded-xl" />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
             <Skeleton className="h-10 w-28 rounded-xl" />
             <Skeleton className="h-10 w-28 rounded-xl" />
             <Skeleton className="h-4 w-40" />
           </div>
         </div>
-      ) : !openWindow ? (
+      ) : openWindows.length === 0 ? (
         <p className="text-sm text-slate-400">Registration is currently closed. Please wait for an admin to open a window.</p>
       ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            onClick={() => void onRegister()}
-            className="rounded-xl"
-            disabled={isRegisterActionDisabled}
-          >
-            Register
-          </Button>
-          <Button
-            type="button"
-            onClick={() => void onRegisterToReserve()}
-            variant="outline"
-            className="rounded-xl border-amber-300/60 text-amber-100 hover:bg-amber-400/10"
-            disabled={isRegisterActionDisabled}
-          >
-            Register To Reserve
-          </Button>
-          <Button
-            type="button"
-            onClick={() => void onCancel()}
-            variant="outline"
-            className="rounded-xl"
-            disabled={isSubmitting}
-          >
-            Cancel
-          </Button>
-          <span className="text-sm font-semibold text-slate-300">
-            Status: {registered ? "Registered - cancel before registering again" : "Not registered"}
-          </span>
-        </div>
-      )}
+        <div className="overflow-hidden rounded-2xl bg-slate-950/30">
+          <div className="overflow-x-auto rounded-t-2xl bg-slate-950 pt-2">
+            <div className="flex min-w-max items-end gap-1 border-b border-slate-700/70">
+              {openWindows.map((window) => {
+                const isSelected = selectedDayId === window.day_id;
+                const isRegistered = registeredDayIds.has(window.day_id);
 
-      {canManageAll ? (
-        <div className="mt-4 rounded-xl border border-slate-700/70 bg-slate-900/50 p-3">
-          <p className="mb-2 text-sm font-semibold text-slate-200">Admin: Add member to this week</p>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <div className="w-full md:max-w-sm">
-              {isLoadingActiveUsers ? (
-                <Skeleton className="h-10 w-full rounded-xl" />
-              ) : (
-                <Select value={selectedUserId || undefined} onValueChange={setSelectedUserId}>
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue placeholder="Select ACTIVE member" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeUsers.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        <span className="inline-flex items-center gap-2">
-                          <span className="font-semibold text-slate-100">{user.character_name ?? user.username}</span>
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold"
-                            style={{
-                              borderColor: `${getBuildColor(user.build ?? "-")}66`,
-                              color: getBuildColor(user.build ?? "-"),
-                              backgroundColor: `${getBuildColor(user.build ?? "-")}1A`,
-                            }}
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: getBuildColor(user.build ?? "-") }} />
-                            {user.build ?? "-"}
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+                return (
+                  <Button
+                    key={window.id}
+                    type="button"
+                    variant={isSelected ? "default" : "outline"}
+                    className={[
+                      "-mb-px h-10 rounded-b-none rounded-t-xl border px-4 text-sm font-semibold transition-all",
+                      isSelected
+                        ? "border-slate-600 border-b-slate-950 bg-slate-950 text-amber-100 hover:bg-slate-950"
+                        : "border-transparent bg-slate-900/70 text-slate-400 hover:bg-slate-900 hover:text-slate-100",
+                    ].join(" ")}
+                    onClick={() => setSelectedDayId(window.day_id)}
+                  >
+                    {formatDayTab(window.day_id)}
+                    {isRegistered ? " • Registered" : ""}
+                  </Button>
+                );
+              })}
             </div>
-            <Button type="button" onClick={() => void onAdminAdd()} className="rounded-xl">
-              Add To Register
-            </Button>
+          </div>
+
+          <div className="rounded-b-2xl rounded-tr-2xl border border-t-0 border-slate-700/50 bg-slate-950/30 p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="button" onClick={() => void onRegister()} className="rounded-xl" disabled={isRegisterActionDisabled}>
+                Register
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void onRegisterToReserve()}
+                variant="outline"
+                className="rounded-xl border-amber-300/60 text-amber-100 hover:bg-amber-400/10"
+                disabled={isRegisterActionDisabled}
+              >
+                Register To Reserve
+              </Button>
+              <Button type="button" onClick={() => void onCancel()} variant="outline" className="rounded-xl" disabled={isSubmitting || !selectedDayId}>
+                Cancel
+              </Button>
+              <span className="text-sm font-semibold text-slate-300">
+                Status: {isRegisteredForSelectedDay ? "Registered" : "Not registered"}
+              </span>
+            </div>
+
+            {canManageAll ? (
+              <div className="mt-4 rounded-xl border border-slate-700/70 bg-slate-900/50 p-3">
+                <p className="mb-2 text-sm font-semibold text-slate-200">Admin: Add member to selected day</p>
+                <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                  <div className="w-full md:max-w-sm">
+                    {isLoadingActiveUsers ? (
+                      <Skeleton className="h-10 w-full rounded-xl" />
+                    ) : (
+                      <Select value={selectedUserId || undefined} onValueChange={setSelectedUserId}>
+                        <SelectTrigger className="rounded-xl">
+                          <SelectValue placeholder="Select ACTIVE member" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {activeUsers.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              <span className="inline-flex items-center gap-2">
+                                <span className="font-semibold text-slate-100">{user.character_name ?? user.username}</span>
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold"
+                                  style={{
+                                    borderColor: `${getBuildColor(user.build ?? "-")}66`,
+                                    color: getBuildColor(user.build ?? "-"),
+                                    backgroundColor: `${getBuildColor(user.build ?? "-")}1A`,
+                                  }}
+                                >
+                                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: getBuildColor(user.build ?? "-") }} />
+                                  {user.build ?? "-"}
+                                </span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  <Button type="button" onClick={() => void onAdminAdd()} className="rounded-xl" disabled={!selectedDayId}>
+                    Add To Register
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
-      ) : null}
-
-
-
-      {/* <ul className="mt-4 space-y-2">
-        {registrants.map((user) => (
-          <li key={user.id}>
-            <button
-              type="button"
-              onClick={() => setExpandedRegistrantId((prev) => (prev === user.id ? null : user.id))}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-left text-sm text-slate-300"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-slate-100">{user.characterName}</span>
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
-                  style={{
-                    borderColor: `${getBuildColor(user.build)}66`,
-                    color: getBuildColor(user.build),
-                    backgroundColor: `${getBuildColor(user.build)}1A`,
-                  }}
-                >
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getBuildColor(user.build) }} />
-                  {user.build}
-                </span>
-              </div>
-              {expandedRegistrantId === user.id ? (
-                <p className="mt-2 text-xs text-slate-400">Discord: {user.discordName} ({user.discordId})</p>
-              ) : null}
-            </button>
-          </li>
-        ))}
-      </ul> */}
+      )}
     </SectionCard>
   );
 }

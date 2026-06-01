@@ -79,9 +79,12 @@ create table if not exists public.users (
 
 create table if not exists public.guild_war_registrations (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.users(id) on delete cascade,
+  user_id uuid references public.users(id) on delete cascade,
   day_id date,
   week_id date not null,
+  character_name text,
+  build text,
+  is_force boolean not null default false,
   created_at timestamptz not null default now(),
   unique (user_id, day_id)
 );
@@ -111,7 +114,9 @@ create table if not exists public.teams (
 create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
-  user_id uuid not null references public.users(id) on delete cascade,
+  user_id uuid references public.users(id) on delete cascade,
+  day_id date,
+  registration_id uuid references public.guild_war_registrations(id) on delete cascade,
   unique (team_id, user_id)
 );
 
@@ -126,7 +131,34 @@ create table if not exists public.map_strategies (
 );
 
 alter table public.guild_war_registrations
-  add column if not exists day_id date;
+  add column if not exists day_id date,
+  add column if not exists character_name text,
+  add column if not exists build text,
+  add column if not exists is_force boolean not null default false;
+
+alter table public.guild_war_registrations
+  alter column user_id drop not null;
+
+alter table public.team_members
+  add column if not exists day_id date,
+  add column if not exists registration_id uuid references public.guild_war_registrations(id) on delete cascade;
+
+update public.team_members tm
+set
+  day_id = src.day_id,
+  registration_id = src.id
+from (
+  select distinct on (r.user_id)
+    r.user_id,
+    r.id,
+    r.day_id,
+    r.created_at
+  from public.guild_war_registrations r
+  where r.day_id is not null
+  order by r.user_id, r.created_at desc
+) as src
+where tm.user_id = src.user_id
+  and (tm.day_id is null or tm.registration_id is null);
 
 alter table public.teams
   add column if not exists description text,
@@ -153,11 +185,25 @@ alter table public.guild_war_registrations
 
 create unique index if not exists idx_gwr_unique_user_day
   on public.guild_war_registrations(user_id, day_id)
-  where day_id is not null;
+  where day_id is not null and is_force = false;
 
-create unique index if not exists idx_gwrw_single_open
+drop index if exists idx_gwrw_single_open;
+
+create index if not exists idx_gwrw_open
   on public.guild_war_registration_windows(is_open)
   where is_open = true;
+
+alter table public.team_members
+  drop constraint if exists team_members_team_id_user_id_key;
+
+drop index if exists idx_team_members_team_user;
+
+create unique index if not exists idx_team_members_unique_day_registration
+  on public.team_members(team_id, day_id, registration_id)
+  where day_id is not null and registration_id is not null;
+
+create index if not exists idx_team_members_day_id on public.team_members(day_id);
+create index if not exists idx_team_members_registration_id on public.team_members(registration_id);
 
 create index if not exists idx_users_status on public.users(status);
 create index if not exists idx_users_username on public.users(username);

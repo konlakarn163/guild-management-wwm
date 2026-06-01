@@ -208,11 +208,11 @@ export function UserManagementPanel() {
   };
 
   return (
-    <SectionCard title="User Management" subtitle="Search by username, filter by status/role/build, manage role and character data">
+    <SectionCard title="User Management" subtitle="Search by username or character name, filter by status/role/build, manage role and character data">
       <div className="mb-3 grid gap-2 md:grid-cols-5">
         <input
           className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-          placeholder="Search username"
+          placeholder="Search username / character"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />

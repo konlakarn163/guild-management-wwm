@@ -28,6 +28,7 @@ interface TeamMemberEntry {
   characterName: string;
   build: string;
   registrationIndex: number;
+  isForce?: boolean;
 }
 
 const getTeamType = (team?: GuildWarTeam | null): GuildWarTeamType => {
@@ -114,17 +115,24 @@ function RegistrationGroup({
                 {title === "Pool" ? `${index + 1}. ` : ""}
                 {member.characterName}
               </span>
-              <span
-                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
-                style={{
-                  borderColor: `${getBuildColor(member.build)}66`,
-                  color: getBuildColor(member.build),
-                  backgroundColor: `${getBuildColor(member.build)}1A`,
-                }}
-              >
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getBuildColor(member.build) }} />
-                {member.build}
-              </span>
+              <div className="flex items-center gap-2">
+                {member.isForce ? (
+                  <span className="rounded-full border border-amber-400/50 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                    FORCE
+                  </span>
+                ) : null}
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
+                  style={{
+                    borderColor: `${getBuildColor(member.build)}66`,
+                    color: getBuildColor(member.build),
+                    backgroundColor: `${getBuildColor(member.build)}1A`,
+                  }}
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getBuildColor(member.build) }} />
+                  {member.build}
+                </span>
+              </div>
             </div>
           ))}
         </div>
@@ -340,7 +348,7 @@ export function WarRegistrationManager() {
     const seen = new Set<string>();
 
     selectedWindowDetails.registrations.forEach((registration: GuildWarRegistration) => {
-      const key = registration.user_id;
+      const key = registration.id;
       if (seen.has(key)) {
         return;
       }
@@ -349,11 +357,13 @@ export function WarRegistrationManager() {
       const entry = {
         key,
         characterName:
+          registration.character_name ??
           registration.users?.character_name ??
           registration.users?.username ??
-          `User-${registration.user_id.slice(0, 8)}`,
-        build: registration.users?.build ?? "-",
+          `User-${(registration.user_id ?? registration.id).slice(0, 8)}`,
+        build: registration.build ?? registration.users?.build ?? "-",
         registrationIndex: uniqueRegistrations.length + 1,
+        isForce: Boolean(registration.is_force),
       };
 
       uniqueRegistrations.push(entry);
@@ -367,11 +377,13 @@ export function WarRegistrationManager() {
       teamMetaByName[team.name] = team;
       const uniqueMembers = new Map<string, TeamMemberEntry>();
       for (const member of team.team_members ?? []) {
-        const existing = memberByKey.get(member.user_id) ?? {
-          key: member.user_id,
-          characterName: `User-${member.user_id.slice(0, 8)}`,
+        const memberKey = member.registration_id ?? member.user_id ?? member.id;
+        const existing = memberByKey.get(memberKey) ?? {
+          key: memberKey,
+          characterName: `User-${memberKey.slice(0, 8)}`,
           build: "-",
           registrationIndex: Number.MAX_SAFE_INTEGER,
+          isForce: false,
         };
         uniqueMembers.set(existing.key, existing);
       }
@@ -510,9 +522,9 @@ export function WarRegistrationManager() {
                             type="button"
                             className="h-8 rounded-lg px-3 text-xs"
                             onClick={() => void handleOpen(win.id)}
-                            disabled={isLoadingOpen}
+                            disabled={isLoadingOpen || openCount >= 2}
                           >
-                            {isLoadingOpen ? "Opening…" : "Open"}
+                            {isLoadingOpen ? "Opening…" : openCount >= 2 ? "Open (Max 2)" : "Open"}
                           </Button>
                         )}
                         <Button

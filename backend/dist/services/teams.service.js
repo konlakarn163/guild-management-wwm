@@ -16,7 +16,8 @@ function collapseDuplicateTeams(teams) {
         }
         const mergedMembers = new Map();
         for (const member of [...(existing.team_members ?? []), ...(team.team_members ?? [])]) {
-            mergedMembers.set(member.user_id, member);
+            const key = member.registration_id ?? member.user_id ?? member.id;
+            mergedMembers.set(key, member);
         }
         byName.set(key, {
             ...existing,
@@ -64,39 +65,91 @@ async function getTeamById(teamId) {
     }
     return data;
 }
+async function getRegistrationsByIds(dayId, registrationIds) {
+    if (registrationIds.length === 0) {
+        return [];
+    }
+    const { data, error } = await supabaseAdmin
+        .from("guild_war_registrations")
+        .select("id, user_id, day_id")
+        .eq("day_id", dayId)
+        .in("id", registrationIds);
+    if (error) {
+        throw new HttpError(500, error.message);
+    }
+    return (data ?? []).map((row) => ({
+        id: row.id,
+        user_id: row.user_id,
+    }));
+}
 export const teamsService = {
-    async getTeam(teamId) {
-        const { data, error } = await supabaseAdmin
+    async getTeam(teamId, dayId) {
+        const { data: teamData, error: teamError } = await supabaseAdmin
             .from("teams")
-            .select("id, name, description, color, team_type, is_locked, team_members(id, user_id)")
+            .select("id, name, description, color, team_type, is_locked")
             .eq("id", teamId)
             .maybeSingle();
-        if (error) {
-            throw new HttpError(500, error.message);
+        if (teamError) {
+            throw new HttpError(500, teamError.message);
         }
-        if (!data) {
+        if (!teamData) {
             throw new HttpError(404, "Team not found");
         }
+        let members = [];
+        if (dayId) {
+            const { data: memberRows, error: memberError } = await supabaseAdmin
+                .from("team_members")
+                .select("id, user_id, registration_id")
+                .eq("team_id", teamId)
+                .eq("day_id", dayId);
+            if (memberError) {
+                throw new HttpError(500, memberError.message);
+            }
+            members = (memberRows ?? []).map((row) => ({ id: row.id, user_id: row.user_id, registration_id: row.registration_id }));
+        }
         return {
-            ...data,
-            team_type: (data.team_type ?? "other"),
+            ...teamData,
+            team_type: (teamData.team_type ?? "other"),
+            team_members: members,
         };
     },
-    async listTeams() {
+    async listTeams(dayId) {
         await ensureReserveTeam();
         const { data, error } = await supabaseAdmin
             .from("teams")
-            .select("id, name, description, color, team_type, is_locked, team_members(id, user_id)")
+            .select("id, name, description, color, team_type, is_locked")
             .order("created_at", { ascending: true });
         if (error) {
             throw new HttpError(500, error.message);
         }
-        // Normalize team_type: default to 'other' if null
-        const normalized = (data ?? []).map((team) => ({
+        const teams = (data ?? []).map((team) => ({
             ...team,
             team_type: (team.team_type ?? "other"),
+            team_members: [],
         }));
-        return collapseDuplicateTeams(normalized);
+        if (!dayId || teams.length === 0) {
+            return collapseDuplicateTeams(teams);
+        }
+        const teamIds = teams.map((team) => team.id);
+        const { data: membersData, error: membersError } = await supabaseAdmin
+            .from("team_members")
+            .select("id, team_id, user_id, registration_id")
+            .eq("day_id", dayId)
+            .in("team_id", teamIds);
+        if (membersError) {
+            throw new HttpError(500, membersError.message);
+        }
+        const membersByTeam = new Map();
+        for (const member of membersData ?? []) {
+            const list = membersByTeam.get(member.team_id) ?? [];
+            list.push({ id: member.id, user_id: member.user_id, registration_id: member.registration_id });
+            membersByTeam.set(member.team_id, list);
+        }
+        const mappedTeams = teams.map((team) => ({
+            ...team,
+            team_members: membersByTeam.get(team.id) ?? [],
+        }));
+        return collapseDuplicateTeams(mappedTeams);
     },
     async createTeam(name, description, color, teamType) {
         if (normalizeTeamName(name) === normalizeTeamName(RESERVE_TEAM_NAME)) {
@@ -119,7 +172,7 @@ export const teamsService = {
         if (existing) {
             return existing;
         }
-        const { data, error } = await supabaseAdmin
+        const { data: created, error: createError } = await supabaseAdmin
             .from("teams")
             .insert({
             name,
@@ -129,10 +182,10 @@ export const teamsService = {
         })
             .select("id, name, description, color, team_type, is_locked")
             .single();
-        if (error) {
-            throw new HttpError(400, error.message);
+        if (createError) {
+            throw new HttpError(400, createError.message);
         }
-        return data;
+        return created;
     },
     async updateTeam(teamId, payload) {
         const currentTeam = await getTeamById(teamId);
@@ -152,56 +205,73 @@ export const teamsService = {
         if (payload.teamType !== undefined) {
             update.team_type = payload.teamType;
         }
-        const { data, error } = await supabaseAdmin
+        const { data: updated, error: updateError } = await supabaseAdmin
             .from("teams")
             .update(update)
             .eq("id", teamId)
             .select("id, name, description, color, team_type, is_locked")
             .maybeSingle();
-        if (error) {
-            throw new HttpError(400, error.message);
+        if (updateError) {
+            throw new HttpError(400, updateError.message);
         }
-        if (!data) {
+        if (!updated) {
             throw new HttpError(404, "Team not found");
         }
-        return data;
+        return updated;
     },
     async deleteTeam(teamId) {
         const currentTeam = await getTeamById(teamId);
         if (currentTeam.name === RESERVE_TEAM_NAME) {
             throw new HttpError(400, "Reserve team cannot be deleted");
         }
-        const { data, error } = await supabaseAdmin
+        const { data: deleted, error: deleteError } = await supabaseAdmin
             .from("teams")
             .delete()
             .eq("id", teamId)
             .select("id, name, description, color, team_type, is_locked")
             .maybeSingle();
-        if (error) {
-            throw new HttpError(500, error.message);
-        }
-        if (!data) {
-            throw new HttpError(404, "Team not found");
-        }
-        return data;
-    },
-    async updateMembers(teamId, userIds) {
-        const { error: deleteError } = await supabaseAdmin.from("team_members").delete().eq("team_id", teamId);
         if (deleteError) {
             throw new HttpError(500, deleteError.message);
         }
-        const dedupedUserIds = [...new Set(userIds)];
-        if (dedupedUserIds.length === 0) {
+        if (!deleted) {
+            throw new HttpError(404, "Team not found");
+        }
+        return deleted;
+    },
+    async updateMembers(teamId, dayId, registrationIds) {
+        const { error: deleteError } = await supabaseAdmin
+            .from("team_members")
+            .delete()
+            .eq("team_id", teamId)
+            .eq("day_id", dayId);
+        if (deleteError) {
+            throw new HttpError(500, deleteError.message);
+        }
+        const dedupedRegistrationIds = [...new Set(registrationIds)];
+        if (dedupedRegistrationIds.length === 0) {
             return [];
         }
-        const payload = dedupedUserIds.map((userId) => ({ team_id: teamId, user_id: userId }));
+        const registrations = await getRegistrationsByIds(dayId, dedupedRegistrationIds);
+        const registrationById = new Map(registrations.map((registration) => [registration.id, registration]));
+        const payload = dedupedRegistrationIds
+            .map((registrationId) => registrationById.get(registrationId))
+            .filter((registration) => Boolean(registration))
+            .map((registration) => ({
+            team_id: teamId,
+            day_id: dayId,
+            registration_id: registration.id,
+            user_id: registration.user_id,
+        }));
+        if (payload.length === 0) {
+            return [];
+        }
         const { data, error } = await supabaseAdmin
             .from("team_members")
             .upsert(payload, {
-            onConflict: "team_id,user_id",
+            onConflict: "team_id,day_id,registration_id",
             ignoreDuplicates: true,
         })
-            .select("id, team_id, user_id");
+            .select("id, team_id, user_id, day_id, registration_id");
         if (error) {
             throw new HttpError(400, error.message);
         }

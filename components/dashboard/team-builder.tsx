@@ -1,18 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { toast } from "react-toastify";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/client-auth";
 import { getRealtimeSocket } from "@/lib/realtime";
-import type { BuildOption, GuildWarRegistration, GuildWarRegistrationWindow, GuildWarTeam, GuildWarTeamType } from "@/lib/types";
-import { getCurrentWeekId } from "@/lib/week-id";
+import type {
+  BuildOption,
+  GuildWarRegistration,
+  GuildWarRegistrationWindow,
+  GuildWarTeam,
+  GuildWarTeamType,
+  OpenGuildWarRegistrationResponse,
+} from "@/lib/types";
 
 interface PublicGuildResponse {
   build_options?: BuildOption[];
@@ -20,9 +30,11 @@ interface PublicGuildResponse {
 
 interface TeamMemberEntry {
   key: string;
+  userId: string | null;
   characterName: string;
   build: string;
   registrationIndex: number;
+  isForce: boolean;
 }
 
 interface TeamState {
@@ -31,7 +43,11 @@ interface TeamState {
 }
 
 interface TeamDefinition extends GuildWarTeam {
-  team_members?: { id: string; user_id: string }[];
+  team_members?: {
+    id: string;
+    user_id?: string | null;
+    registration_id?: string | null;
+  }[];
 }
 
 const getTeamType = (team?: GuildWarTeam | null): GuildWarTeamType => {
@@ -43,7 +59,8 @@ const getTeamType = (team?: GuildWarTeam | null): GuildWarTeamType => {
   return "other";
 };
 
-const sortTeamsByName = (teams: TeamDefinition[]) => [...teams].sort((left, right) => left.name.localeCompare(right.name));
+const sortTeamsByName = (teams: TeamDefinition[]) =>
+  [...teams].sort((left, right) => left.name.localeCompare(right.name));
 
 interface TeamBuilderProps {
   canDrag?: boolean;
@@ -52,6 +69,11 @@ interface TeamBuilderProps {
 const defaultState: TeamState = {
   pool: [],
   teams: {},
+};
+
+const formatDayTab = (dayId: string) => {
+  const [year, month, day] = dayId.split("-");
+  return `${day}/${month}/${year.slice(2)}`;
 };
 
 interface DraggableMemberProps {
@@ -77,21 +99,36 @@ function DraggableMember({
 }: DraggableMemberProps) {
   const moveTargets = zones.filter((zone) => zone !== currentZone);
 
+  const content = (
+    <div className="flex items-center justify-between gap-2">
+      <span>
+        {displayIndex ? `${displayIndex}. ` : ""}
+        {member.characterName}
+      </span>
+      <span
+        className="inline-flex items-center gap-1 text-xs"
+        style={{ color: getBuildColor(member.build) }}
+      >
+        <span
+          className="h-2 w-2 rounded-full"
+          style={{ backgroundColor: getBuildColor(member.build) }}
+        />
+        {member.build}
+      </span>
+      {member.isForce ? (
+        <span className="rounded-full border border-amber-400/50 px-1.5 py-0.5 text-[10px] text-amber-200">
+          FORCE
+        </span>
+      ) : null}
+    </div>
+  );
+
   if (!canManage) {
     return (
       <div
         className={`cursor-default rounded-2xl border px-3 py-2 text-sm font-semibold shadow-[0_8px_18px_rgba(2,6,23,0.35)] opacity-90 ${itemClassName ?? "border-slate-600 bg-slate-900 text-slate-100"}`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <span>
-            {displayIndex ? `${displayIndex}. ` : ""}
-            {member.characterName}
-          </span>
-          <span className="inline-flex items-center gap-1 text-xs" style={{ color: getBuildColor(member.build) }}>
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getBuildColor(member.build) }} />
-            {member.build}
-          </span>
-        </div>
+        {content}
       </div>
     );
   }
@@ -102,20 +139,13 @@ function DraggableMember({
         <div
           className={`rounded-2xl border px-3 py-2 text-sm font-semibold shadow-[0_8px_18px_rgba(2,6,23,0.35)] ${itemClassName ?? "border-slate-600 bg-slate-900 text-slate-100"}`}
         >
-          <div className="flex items-center justify-between gap-2">
-            <span>
-              {displayIndex ? `${displayIndex}. ` : ""}
-              {member.characterName}
-            </span>
-            <span className="inline-flex items-center gap-1 text-xs" style={{ color: getBuildColor(member.build) }}>
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getBuildColor(member.build) }} />
-              {member.build}
-            </span>
-          </div>
+          {content}
         </div>
       </PopoverTrigger>
       <PopoverContent className="w-56">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-200">Move {member.characterName}</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-200">
+          Move {member.characterName}
+        </p>
         <div className="grid gap-1">
           {moveTargets.map((zone) => (
             <button
@@ -171,14 +201,26 @@ function DropZone({
     : undefined;
 
   return (
-    <div className="rounded-md border border-slate-700 bg-slate-950/70 p-4 transition" style={zoneStyle}>
+    <div
+      className="rounded-md border border-slate-700 bg-slate-950/70 p-4 transition"
+      style={zoneStyle}
+    >
       <h4 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-amber-100">
-        {accentColor ? <span className="h-3 w-3 rounded-full" style={{ backgroundColor: accentColor }} /> : null}
+        {accentColor ? (
+          <span
+            className="h-3 w-3 rounded-full"
+            style={{ backgroundColor: accentColor }}
+          />
+        ) : null}
         <span>
           {label} ({totalCount ?? members.length})
         </span>
       </h4>
-      {description ? <p className="mb-3 text-xs leading-5 text-slate-300/80">{description}</p> : null}
+      {description ? (
+        <p className="mb-3 text-xs leading-5 text-slate-300/80">
+          {description}
+        </p>
+      ) : null}
       <div className={membersGridClassName ?? "grid gap-2"}>
         {members.length > 0 ? (
           members.map((member, index) => (
@@ -195,7 +237,9 @@ function DropZone({
             />
           ))
         ) : (
-          <p className="rounded-xl border border-dashed border-slate-700 px-3 py-3 text-xs text-slate-400">No matching members</p>
+          <p className="rounded-xl border border-dashed border-slate-700 px-3 py-3 text-xs text-slate-400">
+            No matching members
+          </p>
         )}
       </div>
     </div>
@@ -209,7 +253,10 @@ function TeamBuilderSkeleton() {
         <Skeleton className="mb-3 h-4 w-28" />
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={`pool-skeleton-${index}`} className="h-12 w-full rounded-2xl" />
+            <Skeleton
+              key={`pool-skeleton-${index}`}
+              className="h-12 w-full rounded-2xl"
+            />
           ))}
         </div>
       </div>
@@ -223,7 +270,10 @@ function TeamBuilderSkeleton() {
             <Skeleton className="mb-3 h-4 w-24" />
             <div className="grid gap-2 sm:grid-cols-2">
               {Array.from({ length: 4 }).map((__, cardIndex) => (
-                <Skeleton key={`team-member-skeleton-${zoneIndex}-${cardIndex}`} className="h-12 w-full rounded-2xl" />
+                <Skeleton
+                  key={`team-member-skeleton-${zoneIndex}-${cardIndex}`}
+                  className="h-12 w-full rounded-2xl"
+                />
               ))}
             </div>
           </div>
@@ -240,33 +290,75 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   const [search, setSearch] = useState("");
   const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
   const [isLoadingPool, setIsLoadingPool] = useState(true);
-  const [_poolMessage, setPoolMessage] = useState<string | null>(null);
+  const [openWindows, setOpenWindows] = useState<GuildWarRegistrationWindow[]>(
+    [],
+  );
+  const [selectedDayId, setSelectedDayId] = useState<string>("");
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const latestPersistStateRef = useRef<TeamState>(defaultState);
-  const currentDayIdRef = useRef<string | null>(null);
-  const weekId = useMemo(() => getCurrentWeekId(), []);
-  const [socketWeekId, setSocketWeekId] = useState(weekId);
-  const teamKeys = useMemo(() => teamDefinitions.map((team) => team.name), [teamDefinitions]);
+  const latestWeekIdRef = useRef<string | null>(null);
+  const teamKeys = useMemo(
+    () => teamDefinitions.map((team) => team.name),
+    [teamDefinitions],
+  );
   const zones = useMemo(() => ["pool", ...teamKeys], [teamKeys]);
   const normalizedSearch = search.trim().toLowerCase();
-  const attackTeams = useMemo(() => sortTeamsByName(teamDefinitions.filter((team) => getTeamType(team) === "atk")), [teamDefinitions]);
-  const defenseTeams = useMemo(() => sortTeamsByName(teamDefinitions.filter((team) => getTeamType(team) === "def")), [teamDefinitions]);
-  const otherTeams = useMemo(() => sortTeamsByName(teamDefinitions.filter((team) => getTeamType(team) === "other")), [teamDefinitions]);
+  const attackTeams = useMemo(
+    () =>
+      sortTeamsByName(
+        teamDefinitions.filter((team) => getTeamType(team) === "atk"),
+      ),
+    [teamDefinitions],
+  );
+  const defenseTeams = useMemo(
+    () =>
+      sortTeamsByName(
+        teamDefinitions.filter((team) => getTeamType(team) === "def"),
+      ),
+    [teamDefinitions],
+  );
+  const otherTeams = useMemo(
+    () =>
+      sortTeamsByName(
+        teamDefinitions.filter((team) => getTeamType(team) === "other"),
+      ),
+    [teamDefinitions],
+  );
   const attackRegisteredCount = useMemo(
-    () => attackTeams.reduce((total, team) => total + (state.teams[team.name]?.length ?? 0), 0),
+    () =>
+      attackTeams.reduce(
+        (total, team) => total + (state.teams[team.name]?.length ?? 0),
+        0,
+      ),
     [attackTeams, state.teams],
   );
   const defenseRegisteredCount = useMemo(
-    () => defenseTeams.reduce((total, team) => total + (state.teams[team.name]?.length ?? 0), 0),
+    () =>
+      defenseTeams.reduce(
+        (total, team) => total + (state.teams[team.name]?.length ?? 0),
+        0,
+      ),
     [defenseTeams, state.teams],
   );
-  const attackDefenseRegisteredCount = attackRegisteredCount + defenseRegisteredCount;
+  const attackDefenseRegisteredCount =
+    attackRegisteredCount + defenseRegisteredCount;
 
   const sortByRegistrationOrder = (members: TeamMemberEntry[]) => {
-    return [...members].sort((left, right) => left.registrationIndex - right.registrationIndex);
+    return [...members].sort(
+      (left, right) => left.registrationIndex - right.registrationIndex,
+    );
   };
 
-  const computeMovedState = (prev: TeamState, memberKey: string, targetZone: string): TeamState => {
+  const selectedWindow = useMemo(
+    () => openWindows.find((window) => window.day_id === selectedDayId) ?? null,
+    [openWindows, selectedDayId],
+  );
+
+  const computeMovedState = (
+    prev: TeamState,
+    memberKey: string,
+    targetZone: string,
+  ): TeamState => {
     const movingMember =
       prev.pool.find((member) => member.key === memberKey) ||
       Object.values(prev.teams)
@@ -290,14 +382,20 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     if (targetZone === "pool") {
       next.pool = sortByRegistrationOrder([...next.pool, movingMember]);
     } else {
-      next.teams[targetZone] = [...(next.teams[targetZone] ?? []), movingMember];
+      next.teams[targetZone] = [
+        ...(next.teams[targetZone] ?? []),
+        movingMember,
+      ];
     }
 
     return next;
   };
 
-  const syncTeamIds = async (token: string) => {
-    const teams = await apiFetch<TeamDefinition[]>("/api/teams", { token });
+  const syncTeamIds = async (token: string, dayId: string) => {
+    const teams = await apiFetch<TeamDefinition[]>(
+      `/api/teams?dayId=${encodeURIComponent(dayId)}`,
+      { token },
+    );
     const mapping: Record<string, string> = {};
 
     for (const team of teams) {
@@ -306,22 +404,19 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
 
     setTeamIdByName(mapping);
     setTeamDefinitions(teams);
-    return mapping;
+    return { mapping, teams };
   };
 
   const persistTeams = async (nextState: TeamState) => {
     try {
       const token = await getAccessToken();
-      if (!token) {
+      if (!token || !selectedDayId) {
         return;
       }
 
-      const dayId = currentDayIdRef.current;
-      if (!dayId) {
-        return;
-      }
-
-      const ids = Object.keys(teamIdByName).length ? teamIdByName : await syncTeamIds(token);
+      const ids = Object.keys(teamIdByName).length
+        ? teamIdByName
+        : (await syncTeamIds(token, selectedDayId)).mapping;
 
       for (const teamName of teamKeys) {
         const teamId = ids[teamName];
@@ -329,102 +424,146 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
           continue;
         }
 
-        const userIds = [...new Set((nextState.teams[teamName] ?? []).map((member) => member.key))];
+        const registrationIds = [
+          ...new Set(
+            (nextState.teams[teamName] ?? []).map((member) => member.key),
+          ),
+        ];
         await apiFetch(`/api/teams/${teamId}/members`, {
           method: "PUT",
           token,
-          body: JSON.stringify({ userIds }),
+          body: JSON.stringify({ dayId: selectedDayId, registrationIds }),
         });
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to save team changes";
-      setPoolMessage(errorMessage);
-      toast.error(errorMessage);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save team changes",
+      );
     }
   };
 
-  const refreshPoolFromRegistrants = async () => {
+  const refreshPoolFromRegistrants = useCallback(async () => {
     try {
       setIsLoadingPool(true);
-      setPoolMessage(null);
 
       const token = await getAccessToken();
       if (!token) {
-        setPoolMessage("Please login first");
         return;
       }
 
-      const openData = await apiFetch<{ window: GuildWarRegistrationWindow | null; registrations: GuildWarRegistration[] }>("/api/guild-war/registrations/open", { token });
-      const { window: openWindow, registrations: list } = openData;
+      const openData = await apiFetch<OpenGuildWarRegistrationResponse>(
+        "/api/guild-war/registrations/open",
+        { token },
+      );
+      const windows = openData.windows ?? [];
+      setOpenWindows(windows);
 
-      if (!openWindow) {
-        currentDayIdRef.current = null;
-        setSocketWeekId(weekId);
+      const targetDayId =
+        selectedDayId &&
+        windows.some((window) => window.day_id === selectedDayId)
+          ? selectedDayId
+          : (windows[0]?.day_id ?? "");
+
+      setSelectedDayId(targetDayId);
+
+      if (!targetDayId) {
+        latestWeekIdRef.current = null;
         setState({ pool: [], teams: {} });
         setTeamIdByName({});
         setTeamDefinitions([]);
-        setIsLoadingPool(false);
         return;
       }
 
-      const dayId = openWindow.day_id;
-      currentDayIdRef.current = dayId;
-      setSocketWeekId(openWindow.week_id);
+      const targetWindow =
+        windows.find((window) => window.day_id === targetDayId) ?? null;
+      latestWeekIdRef.current = targetWindow?.week_id ?? null;
 
-      const teams = await apiFetch<TeamDefinition[]>("/api/teams", { token });
+      const list = openData.registrationsByDay?.[targetDayId] ?? [];
+      const { mapping, teams } = await syncTeamIds(token, targetDayId);
 
       const uniqueMembers: TeamMemberEntry[] = [];
-      const seen = new Set<string>();
       const memberByKey = new Map<string, TeamMemberEntry>();
 
       for (const item of list) {
-        const key = item.user_id;
-        if (!seen.has(key)) {
-          seen.add(key);
+        const key = item.id;
+        if (!memberByKey.has(key)) {
+          const isForce = Boolean(item.is_force);
+          const characterName =
+            item.character_name ??
+            item.users?.character_name ??
+            item.users?.username ??
+            `User-${String(item.user_id ?? item.id).slice(0, 8)}`;
+          const build = item.build ?? item.users?.build ?? "-";
           const entry = {
             key,
-            characterName: item.users?.character_name ?? item.users?.username ?? `User-${item.user_id.slice(0, 8)}`,
-            build: item.users?.build ?? "-",
+            userId: item.user_id ?? null,
+            characterName,
+            build,
             registrationIndex: uniqueMembers.length + 1,
+            isForce,
           };
           uniqueMembers.push(entry);
           memberByKey.set(key, entry);
         }
       }
 
-      const mapping: Record<string, string> = {};
       const persistedTeams: Record<string, TeamMemberEntry[]> = {};
 
       for (const team of teams) {
         mapping[team.name] = team.id;
-        persistedTeams[team.name] = (team.team_members ?? [])
-          .map((member) => memberByKey.get(member.user_id))
+        const rawMembers = team.team_members ?? [];
+        const picked = rawMembers
+          .map((member) => {
+            if (member.registration_id) {
+              return memberByKey.get(member.registration_id) ?? null;
+            }
+
+            if (!member.user_id) {
+              return null;
+            }
+            return (
+              uniqueMembers.find((entry) => entry.userId === member.user_id) ??
+              null
+            );
+          })
           .filter((member): member is TeamMemberEntry => Boolean(member));
+
+        const deduped = [
+          ...new Map(picked.map((member) => [member.key, member])).values(),
+        ];
+        persistedTeams[team.name] = deduped;
       }
 
       setTeamIdByName(mapping);
       setTeamDefinitions(teams);
 
       setState(() => {
-        const assigned = new Set(Object.values(persistedTeams).flat().map((member) => member.key));
+        const assigned = new Set(
+          Object.values(persistedTeams)
+            .flat()
+            .map((member) => member.key),
+        );
         return {
-          pool: sortByRegistrationOrder(uniqueMembers.filter((member) => !assigned.has(member.key))),
+          pool: sortByRegistrationOrder(
+            uniqueMembers.filter((member) => !assigned.has(member.key)),
+          ),
           teams: persistedTeams,
         };
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to load registrants";
-      setPoolMessage(errorMessage);
-      toast.error(errorMessage);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load registrants",
+      );
     } finally {
       setIsLoadingPool(false);
     }
-  };
+  }, [selectedDayId]);
 
   useEffect(() => {
     const loadBuildOptions = async () => {
       try {
-        const guildInfo = await apiFetch<PublicGuildResponse>("/api/public/guild");
+        const guildInfo =
+          await apiFetch<PublicGuildResponse>("/api/public/guild");
         setBuildOptions(guildInfo.build_options ?? []);
       } catch {
         setBuildOptions([]);
@@ -436,18 +575,37 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
 
   useEffect(() => {
     void refreshPoolFromRegistrants();
-  }, [weekId]);
+  }, [refreshPoolFromRegistrants]);
 
   useEffect(() => {
     const socket = getRealtimeSocket();
-    socket.emit("guildWar:joinWeek", socketWeekId);
+    const weekId = latestWeekIdRef.current;
 
-    const onRegistrationsUpdated = (_payload: { weekId: string; dayId?: string }) => {
+    if (weekId) {
+      socket.emit("guildWar:joinWeek", weekId);
+    }
+
+    const onRegistrationsUpdated = (_payload: {
+      weekId: string;
+      dayId?: string;
+    }) => {
       void refreshPoolFromRegistrants();
     };
 
-    const onTeamMoved = (payload: { weekId: string; memberKey: string; targetZone: string }) => {
-      if (payload.weekId !== socketWeekId) {
+    const onTeamMoved = (payload: {
+      weekId: string;
+      dayId?: string;
+      memberKey: string;
+      targetZone: string;
+    }) => {
+      if (
+        !latestWeekIdRef.current ||
+        payload.weekId !== latestWeekIdRef.current
+      ) {
+        return;
+      }
+
+      if (payload.dayId && selectedDayId && payload.dayId !== selectedDayId) {
         return;
       }
 
@@ -460,15 +618,18 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     return () => {
       socket.off("guildWar:registrationsUpdated", onRegistrationsUpdated);
       socket.off("guildWar:teamMoved", onTeamMoved);
-      socket.emit("guildWar:leaveWeek", socketWeekId);
+      if (weekId) {
+        socket.emit("guildWar:leaveWeek", weekId);
+      }
     };
-  }, [socketWeekId]);
+  }, [refreshPoolFromRegistrants, selectedDayId]);
 
   const filteredPool = useMemo(
     () =>
       sortByRegistrationOrder(
         state.pool.filter((member) => {
-          const haystack = `${member.characterName} ${member.build}`.toLowerCase();
+          const haystack =
+            `${member.characterName} ${member.build}`.toLowerCase();
           return haystack.includes(normalizedSearch);
         }),
       ),
@@ -481,7 +642,8 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
         Object.entries(state.teams).map(([team, members]) => [
           team,
           members.filter((member) => {
-            const haystack = `${member.characterName} ${member.build}`.toLowerCase();
+            const haystack =
+              `${member.characterName} ${member.build}`.toLowerCase();
             return haystack.includes(normalizedSearch);
           }),
         ]),
@@ -513,15 +675,20 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     });
 
     const socket = getRealtimeSocket();
-    socket.emit("guildWar:teamMoved", {
-      weekId: socketWeekId,
-      memberKey,
-      targetZone,
-    });
+    if (latestWeekIdRef.current) {
+      socket.emit("guildWar:teamMoved", {
+        weekId: latestWeekIdRef.current,
+        dayId: selectedDayId,
+        memberKey,
+        targetZone,
+      });
+    }
   };
 
   const getBuildColor = (build: string) => {
-    return buildOptions.find((item) => item.label === build)?.color ?? "#94a3b8";
+    return (
+      buildOptions.find((item) => item.label === build)?.color ?? "#94a3b8"
+    );
   };
 
   return (
@@ -545,129 +712,182 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
       }
     >
       <div className="mb-4">
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search member name..."
-          className="h-10 rounded-xl"
-        />
-        {isLoadingPool ? <Skeleton className="mt-2 h-3 w-52" /> : null}
+        <div className="overflow-x-auto rounded-t-2xl bg-slate-950/40  pt-2">
+          <div className="flex min-w-max items-end gap-1 border-b border-slate-700/70">
+            {openWindows.map((window) => {
+              const isActive = selectedDayId === window.day_id;
 
-        {!isLoadingPool ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-3 py-2 text-sm text-rose-100">
-              <span className="font-semibold">ATK:</span> {attackRegisteredCount}
-            </div>
-            <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-100">
-              <span className="font-semibold">DEF:</span> {defenseRegisteredCount}
-            </div>
-            <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-100">
-              <span className="font-semibold">ATK + DEF:</span> {attackDefenseRegisteredCount}
-            </div>
+              return (
+                <Button
+                  key={window.id}
+                  type="button"
+                  variant={isActive ? "default" : "outline"}
+                  className={[
+                    "-mb-px h-10 rounded-b-none rounded-t-xl border px-4 text-sm font-semibold transition-all",
+                    isActive
+                      ? "border-slate-600 border-b-slate-950 bg-slate-950 text-amber-100 hover:bg-slate-950"
+                      : "border-transparent bg-slate-900/70 text-slate-400 hover:bg-slate-900 hover:text-slate-100",
+                  ].join(" ")}
+                  onClick={() => setSelectedDayId(window.day_id)}
+                >
+                  {formatDayTab(window.day_id)}
+                </Button>
+              );
+            })}
           </div>
-        ) : null}
+          {openWindows.length === 0 && !isLoadingPool ? (
+            <p className="px-2 py-3 text-sm text-slate-400">
+              No open registration day
+            </p>
+          ) : null}
+        </div>
 
-      </div>
-      {isLoadingPool ? (
-        <TeamBuilderSkeleton />
-      ) : (
-        <div className="grid gap-4">
-          <DropZone
-            id="pool"
-            label="Pool"
-            members={filteredPool}
-            totalCount={filteredPool.length}
-            canManage={canDrag}
-            zones={zones}
-            onMove={moveMember}
-            getBuildColor={getBuildColor}
-            membersGridClassName="grid gap-2 md:grid-cols-2 xl:grid-cols-3"
-            itemClassName="border-slate-600 bg-slate-900 text-slate-100"
+        <div className="overflow-hidden rounded-b-2xl rounded-tr-2xl border border-t-0 border-slate-700/50 bg-slate-950/30 p-4">
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search member name..."
+            className="h-10 rounded-xl"
           />
-          <div className="grid gap-4 xl:grid-cols-2">
-            <div className="grid gap-3">
-              <div className="rounded-md border border-rose-500/25 bg-rose-950/10 px-4 py-3">
-                <p className="text-sm font-bold uppercase tracking-[0.2em] text-rose-200">ATK</p>
-              </div>
-              {attackTeams.length > 0 ? (
-                attackTeams.map((team) => (
-                  <DropZone
-                    key={team.name}
-                    id={team.name}
-                    label={team.name}
-                    description={team.description}
-                    accentColor={team.color}
-                    members={filteredTeams[team.name] ?? []}
-                    totalCount={(filteredTeams[team.name] ?? []).length}
-                    canManage={canDrag}
-                    zones={zones}
-                    onMove={moveMember}
-                    getBuildColor={getBuildColor}
-                    membersGridClassName="grid gap-2 sm:grid-cols-2"
-                    itemClassName="border-slate-600 bg-slate-900 text-slate-100"
-                  />
-                ))
-              ) : (
-                <p className="rounded-md border border-dashed border-rose-400/30 px-4 py-5 text-sm text-rose-100/70">No ATK teams</p>
-              )}
-            </div>
+          {isLoadingPool ? <Skeleton className="mt-2 h-3 w-52" /> : null}
 
-            <div className="grid gap-3">
-              <div className="rounded-md border border-cyan-500/25 bg-cyan-950/10 px-4 py-3">
-                <p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-200">DEF</p>
+          {!isLoadingPool ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-3 py-2 text-sm text-rose-100">
+                <span className="font-semibold">ATK:</span>{" "}
+                {attackRegisteredCount}
               </div>
-              {defenseTeams.length > 0 ? (
-                defenseTeams.map((team) => (
-                  <DropZone
-                    key={team.name}
-                    id={team.name}
-                    label={team.name}
-                    description={team.description}
-                    accentColor={team.color}
-                    members={filteredTeams[team.name] ?? []}
-                    totalCount={(filteredTeams[team.name] ?? []).length}
-                    canManage={canDrag}
-                    zones={zones}
-                    onMove={moveMember}
-                    getBuildColor={getBuildColor}
-                    membersGridClassName="grid gap-2 sm:grid-cols-2"
-                    itemClassName="border-slate-600 bg-slate-900 text-slate-100"
-                  />
-                ))
-              ) : (
-                <p className="rounded-md border border-dashed border-cyan-400/30 px-4 py-5 text-sm text-cyan-100/70">No DEF teams</p>
-              )}
-            </div>
-          </div>
-
-          {otherTeams.length > 0 ? (
-            <div className="grid gap-3">
-              <div className="rounded-md border border-amber-500/25 bg-amber-950/10 px-4 py-3">
-                <p className="text-sm font-bold uppercase tracking-[0.2em] text-amber-200">OTHER</p>
+              <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-100">
+                <span className="font-semibold">DEF:</span>{" "}
+                {defenseRegisteredCount}
               </div>
-              <div className={`grid gap-3 ${otherTeams.length === 1 ? "grid-cols-1" : "md:grid-cols-2 xl:grid-cols-3"}`}>
-                {otherTeams.map((team) => (
-                  <DropZone
-                    key={team.name}
-                    id={team.name}
-                    label={team.name}
-                    description={team.description}
-                    accentColor={team.color}
-                    members={filteredTeams[team.name] ?? []}
-                    totalCount={(filteredTeams[team.name] ?? []).length}
-                    canManage={canDrag}
-                    zones={zones}
-                    onMove={moveMember}
-                    getBuildColor={getBuildColor}
-                    membersGridClassName="grid gap-2"
-                    itemClassName="border-slate-600 bg-slate-900 text-slate-100"
-                  />
-                ))}
+              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-100">
+                <span className="font-semibold">ATK + DEF:</span>{" "}
+                {attackDefenseRegisteredCount}
               </div>
             </div>
           ) : null}
+
+          <div className="mt-4">
+            {isLoadingPool ? (
+              <TeamBuilderSkeleton />
+            ) : (
+              <div className="grid gap-4">
+                <DropZone
+                  id="pool"
+                  label={
+                    selectedWindow
+                      ? `Pool (${formatDayTab(selectedWindow.day_id)})`
+                      : "Pool"
+                  }
+                  members={filteredPool}
+                  totalCount={filteredPool.length}
+                  canManage={canDrag}
+                  zones={zones}
+                  onMove={moveMember}
+                  getBuildColor={getBuildColor}
+                  membersGridClassName="grid gap-2 md:grid-cols-2 xl:grid-cols-3"
+                  itemClassName="border-slate-600 bg-slate-900 text-slate-100"
+                />
+                <div className="grid items-start gap-4 xl:grid-cols-2">
+                  <div className="grid content-start gap-3 self-start">
+                    <div className="rounded-md border border-rose-500/25 bg-rose-950/10 px-4 py-3 max-h-12">
+                      <p className="text-sm font-bold uppercase tracking-[0.2em] text-rose-200">
+                        ATK
+                      </p>
+                    </div>
+                    {attackTeams.length > 0 ? (
+                      attackTeams.map((team) => (
+                        <DropZone
+                          key={team.name}
+                          id={team.name}
+                          label={team.name}
+                          description={team.description}
+                          accentColor={team.color}
+                          members={filteredTeams[team.name] ?? []}
+                          totalCount={(filteredTeams[team.name] ?? []).length}
+                          canManage={canDrag}
+                          zones={zones}
+                          onMove={moveMember}
+                          getBuildColor={getBuildColor}
+                          membersGridClassName="grid gap-2 sm:grid-cols-2"
+                          itemClassName="border-slate-600 bg-slate-900 text-slate-100"
+                        />
+                      ))
+                    ) : (
+                      <p className="rounded-md border border-dashed border-rose-400/30 px-4 py-5 text-sm text-rose-100/70">
+                        No ATK teams
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid content-start gap-3 self-start">
+                    <div className="rounded-md border border-cyan-500/25 bg-cyan-950/10 px-4 py-3 max-h-12">
+                      <p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-200">
+                        DEF
+                      </p>
+                    </div>
+                    {defenseTeams.length > 0 ? (
+                      defenseTeams.map((team) => (
+                        <DropZone
+                          key={team.name}
+                          id={team.name}
+                          label={team.name}
+                          description={team.description}
+                          accentColor={team.color}
+                          members={filteredTeams[team.name] ?? []}
+                          totalCount={(filteredTeams[team.name] ?? []).length}
+                          canManage={canDrag}
+                          zones={zones}
+                          onMove={moveMember}
+                          getBuildColor={getBuildColor}
+                          membersGridClassName="grid gap-2 sm:grid-cols-2"
+                          itemClassName="border-slate-600 bg-slate-900 text-slate-100"
+                        />
+                      ))
+                    ) : (
+                      <p className="rounded-md border border-dashed border-cyan-400/30 px-4 py-5 text-sm text-cyan-100/70">
+                        No DEF teams
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {otherTeams.length > 0 ? (
+                  <div className="grid gap-3">
+                    <div className="rounded-md border border-amber-500/25 bg-amber-950/10 px-4 py-3">
+                      <p className="text-sm font-bold uppercase tracking-[0.2em] text-amber-200">
+                        OTHER
+                      </p>
+                    </div>
+                    <div
+                      className={`grid gap-3 ${otherTeams.length === 1 ? "grid-cols-1" : "md:grid-cols-2 xl:grid-cols-3"}`}
+                    >
+                      {otherTeams.map((team) => (
+                        <DropZone
+                          key={team.name}
+                          id={team.name}
+                          label={team.name}
+                          description={team.description}
+                          accentColor={team.color}
+                          members={filteredTeams[team.name] ?? []}
+                          totalCount={(filteredTeams[team.name] ?? []).length}
+                          canManage={canDrag}
+                          zones={zones}
+                          onMove={moveMember}
+                          getBuildColor={getBuildColor}
+                          membersGridClassName="grid gap-2"
+                          itemClassName="border-slate-600 bg-slate-900 text-slate-100"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </SectionCard>
   );
 }

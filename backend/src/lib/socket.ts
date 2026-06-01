@@ -33,7 +33,7 @@ export const initSocketServer = (server: HttpServer) => {
 
     socket.on(
       "guildWar:teamMoved",
-      (payload: { weekId: string; memberKey: string; targetZone: string }) => {
+      (payload: { weekId: string; dayId?: string; memberKey: string; targetZone: string }) => {
         if (!payload || !isWeekId(payload.weekId) || !io) {
           return;
         }

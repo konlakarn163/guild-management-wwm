@@ -8,8 +8,12 @@ import { discordNotifierService } from "../services/discord-notifier.service.js"
 const weekSchema = z.object({
     weekId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
+const dayPayloadSchema = z.object({
+    dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
 const adminRegisterSchema = z.object({
     userId: z.string().uuid(),
+    dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 const createWindowSchema = z.object({
     dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -37,13 +41,14 @@ export const guildWarController = {
         res.json(registrations);
     }),
     listOpen: asyncHandler(async (_req, res) => {
-        const openWindow = await guildWarService.getOpenRegistrationWindow();
-        if (!openWindow) {
-            res.json({ window: null, registrations: [] });
-            return;
-        }
-        const registrations = await guildWarService.listRegistrationsByDay(openWindow.day_id);
-        res.json({ window: openWindow, registrations });
+        const payload = await guildWarService.listOpenRegistrationData();
+        const firstWindow = payload.windows[0] ?? null;
+        res.json({
+            windows: payload.windows,
+            registrationsByDay: payload.registrationsByDay,
+            window: firstWindow,
+            registrations: firstWindow ? payload.registrationsByDay[firstWindow.day_id] ?? [] : [],
+        });
     }),
     listWindows: asyncHandler(async (req, res) => {
         assertAdmin(req);
@@ -109,70 +114,67 @@ export const guildWarController = {
         if (!req.authUser) {
             throw new HttpError(401, "Unauthorized");
         }
-        const registration = await guildWarService.register(req.authUser.id);
-        const openWindow = await guildWarService.getOpenRegistrationWindow();
-        if (openWindow) {
-            getSocketServer().to(`guildWar:week:${openWindow.week_id}`).emit("guildWar:registrationsUpdated", {
-                weekId: openWindow.week_id,
-                dayId: openWindow.day_id,
-                action: "register",
-                userId: req.authUser.id,
-            });
-        }
+        const { dayId } = dayPayloadSchema.parse(req.body);
+        const registration = await guildWarService.registerByDay(req.authUser.id, dayId);
+        getSocketServer().to(`guildWar:week:${registration.week_id}`).emit("guildWar:registrationsUpdated", {
+            weekId: registration.week_id,
+            dayId,
+            action: "register",
+            userId: req.authUser.id,
+        });
         res.status(201).json(registration);
     }),
     registerToReserve: asyncHandler(async (req, res) => {
         if (!req.authUser) {
             throw new HttpError(401, "Unauthorized");
         }
-        const registration = await guildWarService.registerToReserve(req.authUser.id);
-        const openWindow = await guildWarService.getOpenRegistrationWindow();
-        if (openWindow) {
-            const io = getSocketServer();
-            const roomId = `guildWar:week:${openWindow.week_id}`;
-            io.to(roomId).emit("guildWar:registrationsUpdated", {
-                weekId: openWindow.week_id,
-                dayId: openWindow.day_id,
-                action: "register-reserve",
-                userId: req.authUser.id,
-            });
-            io.to(roomId).emit("guildWar:teamMoved", {
-                weekId: openWindow.week_id,
-                memberKey: req.authUser.id,
-                targetZone: "Reserve",
-            });
-        }
+        const { dayId } = dayPayloadSchema.parse(req.body);
+        const registration = await guildWarService.registerToReserveByDay(req.authUser.id, dayId);
+        const io = getSocketServer();
+        const roomId = `guildWar:week:${registration.week_id}`;
+        io.to(roomId).emit("guildWar:registrationsUpdated", {
+            weekId: registration.week_id,
+            dayId,
+            action: "register-reserve",
+            userId: req.authUser.id,
+        });
+        io.to(roomId).emit("guildWar:teamMoved", {
+            weekId: registration.week_id,
+            dayId,
+            memberKey: registration.id,
+            targetZone: "Reserve",
+        });
         res.status(201).json(registration);
     }),
     adminRegister: asyncHandler(async (req, res) => {
         assertAdmin(req);
         const body = adminRegisterSchema.parse(req.body);
-        const registration = await guildWarService.adminRegister(body.userId);
-        const openWindow = await guildWarService.getOpenRegistrationWindow();
-        if (openWindow) {
-            getSocketServer().to(`guildWar:week:${openWindow.week_id}`).emit("guildWar:registrationsUpdated", {
-                weekId: openWindow.week_id,
-                dayId: openWindow.day_id,
-                action: "admin-register",
-                userId: body.userId,
-            });
-        }
+        const registration = await guildWarService.adminRegisterByDay(body.userId, body.dayId);
+        getSocketServer().to(`guildWar:week:${registration.week_id}`).emit("guildWar:registrationsUpdated", {
+            weekId: registration.week_id,
+            dayId: body.dayId,
+            action: "admin-register",
+            userId: body.userId,
+        });
         res.status(201).json(registration);
     }),
     cancelOpen: asyncHandler(async (req, res) => {
         if (!req.authUser) {
             throw new HttpError(401, "Unauthorized");
         }
-        await guildWarService.cancel(req.authUser.id);
-        const openWindow = await guildWarService.getOpenRegistrationWindow();
-        if (openWindow) {
-            getSocketServer().to(`guildWar:week:${openWindow.week_id}`).emit("guildWar:registrationsUpdated", {
-                weekId: openWindow.week_id,
-                dayId: openWindow.day_id,
-                action: "cancel",
-                userId: req.authUser.id,
-            });
+        const { dayId } = dayPayloadSchema.parse(req.body);
+        const openWindows = await guildWarService.listOpenRegistrationWindows();
+        const targetWindow = openWindows.find((window) => window.day_id === dayId);
+        if (!targetWindow) {
+            throw new HttpError(403, "Selected registration day is currently closed");
         }
+        await guildWarService.cancelByDay(req.authUser.id, dayId);
+        getSocketServer().to(`guildWar:week:${targetWindow.week_id}`).emit("guildWar:registrationsUpdated", {
+            weekId: targetWindow.week_id,
+            dayId,
+            action: "cancel",
+            userId: req.authUser.id,
+        });
         res.status(204).send();
     }),
     cancel: asyncHandler(async (req, res) => {

@@ -18,7 +18,10 @@ export interface GuildWarRegistration {
   id: string;
   day_id?: string | null;
   week_id: string;
-  user_id: string;
+  user_id?: string | null;
+  character_name?: string | null;
+  build?: string | null;
+  is_force?: boolean;
   users?: {
     username?: string;
     discord_id?: string;
@@ -37,13 +40,17 @@ export interface GuildWarRegistrationWindow {
 }
 
 export interface OpenGuildWarRegistrationResponse {
+  windows: GuildWarRegistrationWindow[];
+  registrationsByDay: Record<string, GuildWarRegistration[]>;
   window: GuildWarRegistrationWindow | null;
   registrations: GuildWarRegistration[];
 }
 
 export interface GuildWarTeamMemberRef {
   id: string;
-  user_id: string;
+  user_id?: string | null;
+  day_id?: string | null;
+  registration_id?: string | null;
 }
 
 export type GuildWarTeamType = "atk" | "def" | "other";
