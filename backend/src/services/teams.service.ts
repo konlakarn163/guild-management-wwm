@@ -352,12 +352,19 @@ export const teamsService = {
       return [];
     }
 
+    const { error: clearError } = await supabaseAdmin
+      .from("team_members")
+      .delete()
+      .eq("day_id", dayId)
+      .in("registration_id", dedupedRegistrationIds);
+
+    if (clearError) {
+      throw new HttpError(500, clearError.message);
+    }
+
     const { data, error } = await supabaseAdmin
       .from("team_members")
-      .upsert(payload, {
-        onConflict: "team_id,day_id,registration_id",
-        ignoreDuplicates: true,
-      })
+      .insert(payload)
       .select("id, team_id, user_id, day_id, registration_id");
 
     if (error) {

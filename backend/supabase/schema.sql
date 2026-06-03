@@ -143,6 +143,9 @@ alter table public.team_members
   add column if not exists day_id date,
   add column if not exists registration_id uuid references public.guild_war_registrations(id) on delete cascade;
 
+alter table public.team_members
+  alter column user_id drop not null;
+
 update public.team_members tm
 set
   day_id = src.day_id,

@@ -295,7 +295,6 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   );
   const [selectedDayId, setSelectedDayId] = useState<string>("");
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const latestPersistStateRef = useRef<TeamState>(defaultState);
   const latestWeekIdRef = useRef<string | null>(null);
   const teamKeys = useMemo(
     () => teamDefinitions.map((team) => team.name),
@@ -407,7 +406,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     return { mapping, teams };
   };
 
-  const persistTeams = async (nextState: TeamState) => {
+  const persistTeams = async (nextState: TeamState, teamNames: string[]) => {
     try {
       const token = await getAccessToken();
       if (!token || !selectedDayId) {
@@ -418,7 +417,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
         ? teamIdByName
         : (await syncTeamIds(token, selectedDayId)).mapping;
 
-      for (const teamName of teamKeys) {
+      for (const teamName of teamNames) {
         const teamId = ids[teamName];
         if (!teamId) {
           continue;
@@ -655,20 +654,29 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     setState((prev) => computeMovedState(prev, memberKey, targetZone));
   };
 
-  const enqueuePersistTeams = (nextState: TeamState) => {
-    latestPersistStateRef.current = nextState;
+  const enqueuePersistTeams = (nextState: TeamState, teamNames: string[]) => {
     persistQueueRef.current = persistQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        await persistTeams(latestPersistStateRef.current);
+        await persistTeams(nextState, teamNames);
       });
   };
 
   const moveMember = (memberKey: string, targetZone: string) => {
     setState((prev) => {
+      const sourceZone = prev.pool.some((member) => member.key === memberKey)
+        ? "pool"
+        : Object.entries(prev.teams).find(([, members]) =>
+            members.some((member) => member.key === memberKey),
+          )?.[0] ?? null;
       const next = computeMovedState(prev, memberKey, targetZone);
       if (canDrag) {
-        enqueuePersistTeams(next);
+        const zonesToPersist = [sourceZone, targetZone].filter(
+          (zone): zone is string => Boolean(zone && zone !== "pool"),
+        );
+        if (zonesToPersist.length > 0) {
+          enqueuePersistTeams(next, [...new Set(zonesToPersist)]);
+        }
       }
 
       return next;
