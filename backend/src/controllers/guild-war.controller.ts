@@ -6,6 +6,7 @@ import { HttpError } from "../utils/http-error.js";
 import { normalizeWeekIdToMonday } from "../utils/week-id.js";
 import { guildWarService } from "../services/guild-war.service.js";
 import { discordNotifierService } from "../services/discord-notifier.service.js";
+import { discordCodeDedupeService } from "../services/discord-code-dedupe.service.js";
 
 const weekSchema = z.object({
   weekId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -27,6 +28,11 @@ const createWindowSchema = z.object({
 const sendCustomNoticeSchema = z.object({
   message: z.string().min(1).max(4000),
   mentionRole: z.boolean(),
+});
+
+const discordCodeDedupeSchema = z.object({
+  messageId: z.string().min(1).optional(),
+  maxHistoryMessages: z.coerce.number().int().min(1).max(5000).optional(),
 });
 
 const windowIdSchema = z.object({
@@ -241,5 +247,19 @@ export const guildWarController = {
     const payload = sendCustomNoticeSchema.parse(req.body);
     await discordNotifierService.sendCustomNotice(payload.message, payload.mentionRole);
     res.json({ success: true });
+  }),
+
+  sendDiscordCodeDedupeReport: asyncHandler(async (req: Request, res: Response) => {
+    assertAdmin(req);
+    const payload = discordCodeDedupeSchema.parse(req.body ?? {});
+    const result = await discordCodeDedupeService.dedupeAndReport({
+      messageId: payload.messageId,
+      maxHistoryMessages: payload.maxHistoryMessages,
+    });
+
+    res.json({
+      success: true,
+      ...result,
+    });
   }),
 };

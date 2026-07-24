@@ -1,6 +1,10 @@
 import { config } from "dotenv";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
-config();
+const currentFileDir = dirname(fileURLToPath(import.meta.url));
+const backendRootDir = resolve(currentFileDir, "../..");
+config({ path: resolve(backendRootDir, ".env") });
 const envSchema = z.object({
     PORT: z.coerce.number().default(4000),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -11,6 +15,10 @@ const envSchema = z.object({
     SUPABASE_JWT_SECRET: z.string().min(1),
     DISCORD_WEBHOOK_URL: z.string().url().optional(),
     DISCORD_NOTIFY_ROLE_ID: z.string().min(1).optional(),
+    DISCORD_BOT_TOKEN: z.string().min(1).optional(),
+    DISCORD_CODE_CHANNEL_ID: z.string().min(1).optional(),
+    DISCORD_CODE_REPORT_WEBHOOK_URL: z.string().url().optional(),
+    DISCORD_CODE_AUTOMATION_ENABLED: z.coerce.boolean().default(false),
 });
 const parsedEnv = envSchema.safeParse(process.env);
 if (!parsedEnv.success) {

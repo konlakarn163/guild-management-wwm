@@ -11,6 +11,7 @@ guildWarRouter.post("/windows/:id/open", guildWarController.openWindow);
 guildWarRouter.post("/windows/:id/close", guildWarController.closeWindow);
 guildWarRouter.delete("/windows/:id", guildWarController.deleteWindow);
 guildWarRouter.post("/notices/send", guildWarController.sendCustomNotice);
+guildWarRouter.post("/discord/codes/dedupe-report", guildWarController.sendDiscordCodeDedupeReport);
 
 guildWarRouter.get("/registrations/open", guildWarController.listOpen);
 guildWarRouter.delete("/registrations/cleanup/previous-months", guildWarController.cleanupPreviousMonthRegistrations);
