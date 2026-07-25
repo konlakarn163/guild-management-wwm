@@ -18,6 +18,11 @@ const DEFAULT_BUILD_OPTIONS = [
     { label: "TangDao", color: "#1253e0" },
     { label: "Um-Chain", color: "#167312" },
 ];
+const DEFAULT_GUILD_SETTINGS = {
+    name: "Where Winds Meet TH",
+    code: "WWM-TH",
+    description: "Competitive war guild",
+};
 export const guildSettingsService = {
     async getOne() {
         const { data, error } = await supabaseAdmin
@@ -49,7 +54,7 @@ export const guildSettingsService = {
     async upsert(payload) {
         const { data: existing, error: findError } = await supabaseAdmin
             .from("guild_settings")
-            .select("id")
+            .select("id, name, code, description, discord_invite")
             .limit(1)
             .maybeSingle();
         if (findError && findError.code !== "PGRST116") {
@@ -71,10 +76,10 @@ export const guildSettingsService = {
             return true;
         });
         const updatePayload = {
-            name: payload.name,
-            code: payload.code,
-            description: payload.description,
-            discord_invite: payload.discord_invite,
+            name: payload.name ?? existing?.name ?? DEFAULT_GUILD_SETTINGS.name,
+            code: payload.code ?? existing?.code ?? DEFAULT_GUILD_SETTINGS.code,
+            description: payload.description ?? existing?.description ?? DEFAULT_GUILD_SETTINGS.description,
+            discord_invite: payload.discord_invite ?? existing?.discord_invite ?? null,
         };
         const updateQuery = existing
             ? supabaseAdmin.from("guild_settings").update(updatePayload).eq("id", existing.id)

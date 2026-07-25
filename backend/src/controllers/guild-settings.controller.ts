@@ -6,9 +6,9 @@ import { asyncHandler } from "../utils/async-handler.js";
 const ALLOWED_BUILD_COLORS = ["#d65409", "#1253e0", "#167312"] as const;
 
 const upsertSchema = z.object({
-  name: z.string().min(1).max(120),
-  code: z.string().min(1).max(40),
-  description: z.string().min(1).max(500),
+  name: z.string().min(1).max(120).optional(),
+  code: z.string().min(1).max(40).optional(),
+  description: z.string().min(1).max(500).optional(),
   discord_invite: z
     .union([z.string().url(), z.literal(""), z.null()])
     .optional()
