@@ -10,4 +10,4 @@ services:
       - key: NODE_ENV
         value: production
       - key: FRONTEND_ORIGIN
-        value: https://meawmeaw-wwm.konlakarn.space
+        value: http://localhost:3000,https://meawmeaw-wwm.konlakarn.space
