@@ -9,7 +9,10 @@ const upsertSchema = z.object({
   name: z.string().min(1).max(120),
   code: z.string().min(1).max(40),
   description: z.string().min(1).max(500),
-  discord_invite: z.string().url().nullable().optional(),
+  discord_invite: z
+    .union([z.string().url(), z.literal(""), z.null()])
+    .optional()
+    .transform((value) => (value === "" ? null : value)),
   build_options: z
     .array(
       z.object({

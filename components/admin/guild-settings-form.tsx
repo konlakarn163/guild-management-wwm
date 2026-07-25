@@ -83,6 +83,7 @@ export function GuildSettingsForm() {
         token,
         body: JSON.stringify({
           ...settings,
+          discord_invite: settings.discord_invite?.trim() ? settings.discord_invite.trim() : null,
           build_options:
             settings.build_options
               ?.map((item) => ({

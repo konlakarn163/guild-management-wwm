@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { ZodError } from "zod";
 import { HttpError } from "../utils/http-error.js";
 
 export const notFoundHandler = (_req: Request, res: Response) => {
@@ -15,6 +16,14 @@ export const errorHandler = (
 
   if (error instanceof HttpError) {
     res.status(error.statusCode).json({ message: error.message });
+    return;
+  }
+
+  if (error instanceof ZodError) {
+    res.status(400).json({
+      message: "Invalid request payload",
+      errors: error.flatten().fieldErrors,
+    });
     return;
   }
 

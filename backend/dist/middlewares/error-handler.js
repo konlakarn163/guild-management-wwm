@@ -1,3 +1,4 @@
+import { ZodError } from "zod";
 import { HttpError } from "../utils/http-error.js";
 export const notFoundHandler = (_req, res) => {
     res.status(404).json({ message: "Route not found" });
@@ -6,6 +7,13 @@ export const errorHandler = (error, _req, res, next) => {
     void next;
     if (error instanceof HttpError) {
         res.status(error.statusCode).json({ message: error.message });
+        return;
+    }
+    if (error instanceof ZodError) {
+        res.status(400).json({
+            message: "Invalid request payload",
+            errors: error.flatten().fieldErrors,
+        });
         return;
     }
     res.status(500).json({

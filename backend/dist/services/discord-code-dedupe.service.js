@@ -24,17 +24,16 @@ function buildReportMessage(result) {
     lines.push("ตรวจโค้ดจากข้อความล่าสุดเรียบร้อยแล้ว");
     lines.push(`ผู้ส่ง: ${result.targetAuthor}`);
     lines.push("");
-    lines.push(`โค้ดซ้ำ (${result.duplicateCodes.length})`);
-    if (result.duplicateCodes.length === 0) {
-        lines.push("- ไม่มี");
-    }
-    else {
-        for (const code of result.duplicateCodes) {
-            lines.push(`- ${code}`);
-        }
-    }
+    //   lines.push(`โค้ดซ้ำ (${result.duplicateCodes.length})`);
+    //   if (result.duplicateCodes.length === 0) {
+    //     lines.push("- ไม่มี");
+    //   } else {
+    //     for (const code of result.duplicateCodes) {
+    //       lines.push(`- ${code}`);
+    //     }
+    //   }
     lines.push("");
-    lines.push(`โค้ดไม่ซ้ำ (${result.uniqueCodes.length})`);
+    lines.push(`โค้ดที่ไม่ซ้ำ (${result.uniqueCodes.length})`);
     if (result.uniqueCodes.length === 0) {
         lines.push("- ไม่มี");
     }
@@ -47,9 +46,8 @@ function buildReportMessage(result) {
 }
 function buildUniqueAllReportMessage(result) {
     const lines = [];
-    lines.push("สรุปโค้ดทั้งหมด (ไม่ซ้ำ)");
-    lines.push(`อ่านข้อความย้อนหลัง: ${result.scannedMessageCount} ข้อความ`);
-    lines.push(`โค้ดไม่ซ้ำทั้งหมด: ${result.uniqueCodes.length}`);
+    lines.push("สรุปโค้ดทั้งหมด");
+    lines.push(`โค้ด (ไม่ซ้ำ) ทั้งหมด: ${result.uniqueCodes.length}`);
     lines.push("");
     if (result.uniqueCodes.length === 0) {
         lines.push("- ไม่มีโค้ด");

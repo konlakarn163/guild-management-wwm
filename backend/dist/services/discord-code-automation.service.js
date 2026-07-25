@@ -99,21 +99,23 @@ export async function startDiscordCodeAutomation() {
             return;
         }
         const normalizedContent = message.content.trim().toLowerCase();
-        if (LIST_ALL_CODES_COMMANDS.includes(normalizedContent)) {
-            queue = queue
-                .then(async () => {
-                rememberProcessedMessageId(message.id);
-                console.log(`[DiscordCodeAutomation] Processing list-all command ${message.id}`);
-                const result = await discordCodeDedupeService.reportAllUniqueCodes();
-                console.log(`[DiscordCodeAutomation] List-all complete ${message.id} unique=${result.uniqueCodes.length} scanned=${result.scannedMessageCount}`);
-            })
-                .catch((error) => {
-                console.warn("[DiscordCodeAutomation] Failed list-all command", message.id, {
-                    message: error instanceof Error ? error.message : String(error),
-                });
-            });
-            return;
-        }
+        // if (LIST_ALL_CODES_COMMANDS.includes(normalizedContent)) {
+        //   queue = queue
+        //     .then(async () => {
+        //       rememberProcessedMessageId(message.id);
+        //       console.log(`[DiscordCodeAutomation] Processing list-all command ${message.id}`);
+        //       const result = await discordCodeDedupeService.reportAllUniqueCodes();
+        //       console.log(
+        //         `[DiscordCodeAutomation] List-all complete ${message.id} unique=${result.uniqueCodes.length} scanned=${result.scannedMessageCount}`,
+        //       );
+        //     })
+        //     .catch((error) => {
+        //       console.warn("[DiscordCodeAutomation] Failed list-all command", message.id, {
+        //         message: error instanceof Error ? error.message : String(error),
+        //       });
+        //     });
+        //   return;
+        // }
         const candidateCodes = extractCandidateCodes(message.content);
         if (candidateCodes.length === 0) {
             console.log(`[DiscordCodeAutomation] Ignored ${message.id} (no candidate codes)`);
