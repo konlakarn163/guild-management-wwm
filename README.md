@@ -113,3 +113,7 @@ Super Admin:
 2. ตั้งค่า Discord provider ใน Supabase Auth
 3. ใส่ redirect URL ของเว็บ เช่น http://localhost:3000/dashboard
 4. ตั้ง RLS ตาม policy ที่ทีมต้องการ (ตอนนี้ backend ใช้ service role key)
+
+## Keepalive
+
+Render free-tier อาจหยุดหลังจากไม่มี traffic เป็นช่วงเวลานาน ดังนั้นได้เพิ่ม GitHub Actions workflow ที่ยิง health endpoint ทุก 5 นาทีจาก [.github/workflows/keepalive.yml](.github/workflows/keepalive.yml)
