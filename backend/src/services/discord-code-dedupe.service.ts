@@ -153,8 +153,19 @@ async function fetchDiscordJson<T>(path: string): Promise<T> {
 }
 
 async function fetchMessageById(messageId: string): Promise<DiscordMessage> {
+  const channelId = env.DISCORD_CODE_CHANNEL_ID;
+
   return fetchDiscordJson<DiscordMessage>(
-    `/channels/${env.DISCORD_CODE_CHANNEL_ID}/messages/${messageId}`,
+    `/channels/${channelId}/messages/${messageId}`,
+  );
+}
+
+async function fetchMessageByIdInChannel(
+  channelId: string,
+  messageId: string,
+): Promise<DiscordMessage> {
+  return fetchDiscordJson<DiscordMessage>(
+    `/channels/${channelId}/messages/${messageId}`,
   );
 }
 
@@ -243,6 +254,7 @@ async function postViaWebhook(content: string): Promise<void> {
 export const discordCodeDedupeService = {
   async dedupeAndReport(options: {
     messageId?: string;
+    channelId?: string;
     maxHistoryMessages?: number;
   }): Promise<DedupeResult> {
     requireDiscordConfig();
@@ -254,7 +266,9 @@ export const discordCodeDedupeService = {
 
     let targetMessage: DiscordMessage;
     if (options.messageId) {
-      targetMessage = await fetchMessageById(options.messageId);
+      targetMessage = options.channelId
+        ? await fetchMessageByIdInChannel(options.channelId, options.messageId)
+        : await fetchMessageById(options.messageId);
     } else {
       const recentMessages = await fetchRecentMessages(50);
       const firstUserMessageWithCodes = recentMessages.find(
@@ -281,10 +295,33 @@ export const discordCodeDedupeService = {
       );
     }
 
-    const historyMessages = await fetchHistoryBeforeMessage(
-      targetMessage.id,
-      maxHistoryMessages,
-    );
+    const historyMessages = options.channelId
+      ? await fetchDiscordJson<DiscordMessage[]>(
+          `/channels/${options.channelId}/messages?limit=${Math.min(maxHistoryMessages, 100)}&before=${targetMessage.id}`,
+        )
+      : await fetchHistoryBeforeMessage(
+          targetMessage.id,
+          maxHistoryMessages,
+        );
+
+    // Continue paging history for thread/overridden channels beyond the first page.
+    if (options.channelId && historyMessages.length > 0 && historyMessages.length < maxHistoryMessages) {
+      let before = historyMessages[historyMessages.length - 1]!.id;
+      while (historyMessages.length < maxHistoryMessages) {
+        const remaining = maxHistoryMessages - historyMessages.length;
+        const batchSize = Math.min(100, remaining);
+        const batch = await fetchDiscordJson<DiscordMessage[]>(
+          `/channels/${options.channelId}/messages?limit=${batchSize}&before=${before}`,
+        );
+
+        if (batch.length === 0) {
+          break;
+        }
+
+        historyMessages.push(...batch);
+        before = batch[batch.length - 1]!.id;
+      }
+    }
     const historyCodeSet = new Set<string>();
     for (const message of historyMessages) {
       const tokens = extractCandidateCodes(message.content);

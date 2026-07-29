@@ -7,5 +7,10 @@ const server = createServer(app);
 initSocketServer(server);
 server.listen(env.PORT, () => {
     console.log(`Guild backend listening on port ${env.PORT}`);
-    void startDiscordCodeAutomation();
+    if (env.RUN_DISCORD_AUTOMATION_ON_WEB) {
+        void startDiscordCodeAutomation();
+    }
+    else {
+        console.log("[DiscordCodeAutomation] Disabled on web process (RUN_DISCORD_AUTOMATION_ON_WEB=false)");
+    }
 });

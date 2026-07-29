@@ -6,6 +6,7 @@ let client = null;
 let queue = Promise.resolve();
 const processedMessageIds = new Set();
 const seenNonTargetChannels = new Set();
+let warnedEmptyMessageContent = false;
 const LIST_ALL_CODES_COMMANDS = ["#ขอโค๊ดทั้งหมด", "#ขอโค้ดทั้งหมด"];
 function rememberProcessedMessageId(messageId) {
     processedMessageIds.add(messageId);
@@ -69,6 +70,17 @@ export async function startDiscordCodeAutomation() {
             });
         });
     });
+    client.on(Events.ShardDisconnect, (event, shardId) => {
+        console.warn(`[DiscordCodeAutomation] Shard disconnected shard=${shardId} code=${event.code} reason=${event.reason ?? "unknown"}`);
+    });
+    client.on(Events.ShardResume, (shardId, replayedEvents) => {
+        console.log(`[DiscordCodeAutomation] Shard resumed shard=${shardId} replayed=${replayedEvents}`);
+    });
+    client.on(Events.Error, (error) => {
+        console.warn("[DiscordCodeAutomation] Client error", {
+            message: error instanceof Error ? error.message : String(error),
+        });
+    });
     client.on(Events.Raw, (packet) => {
         if (packet.t !== "MESSAGE_CREATE") {
             return;
@@ -97,6 +109,10 @@ export async function startDiscordCodeAutomation() {
         }
         if (processedMessageIds.has(message.id)) {
             return;
+        }
+        if (!warnedEmptyMessageContent && message.content.trim().length === 0) {
+            warnedEmptyMessageContent = true;
+            console.warn("[DiscordCodeAutomation] Received message with empty content. Check Message Content Intent in Discord Developer Portal.");
         }
         const normalizedContent = message.content.trim().toLowerCase();
         // if (LIST_ALL_CODES_COMMANDS.includes(normalizedContent)) {
@@ -127,6 +143,7 @@ export async function startDiscordCodeAutomation() {
             console.log(`[DiscordCodeAutomation] Processing ${message.id} candidates=${candidateCodes.length}`);
             const result = await discordCodeDedupeService.dedupeAndReport({
                 messageId: message.id,
+                channelId: message.channelId,
             });
             console.log(`[DiscordCodeAutomation] Processed ${message.id} unique=${result.uniqueCodes.length} duplicate=${result.duplicateCodes.length}`);
         })

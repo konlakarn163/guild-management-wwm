@@ -105,7 +105,11 @@ async function fetchDiscordJson(path) {
     return (await response.json());
 }
 async function fetchMessageById(messageId) {
-    return fetchDiscordJson(`/channels/${env.DISCORD_CODE_CHANNEL_ID}/messages/${messageId}`);
+    const channelId = env.DISCORD_CODE_CHANNEL_ID;
+    return fetchDiscordJson(`/channels/${channelId}/messages/${messageId}`);
+}
+async function fetchMessageByIdInChannel(channelId, messageId) {
+    return fetchDiscordJson(`/channels/${channelId}/messages/${messageId}`);
 }
 async function fetchRecentMessages(limit) {
     return fetchDiscordJson(`/channels/${env.DISCORD_CODE_CHANNEL_ID}/messages?limit=${limit}`);
@@ -168,7 +172,9 @@ export const discordCodeDedupeService = {
         const maxHistoryMessages = Math.min(Math.max(options.maxHistoryMessages ?? 1000, 1), 5000);
         let targetMessage;
         if (options.messageId) {
-            targetMessage = await fetchMessageById(options.messageId);
+            targetMessage = options.channelId
+                ? await fetchMessageByIdInChannel(options.channelId, options.messageId)
+                : await fetchMessageById(options.messageId);
         }
         else {
             const recentMessages = await fetchRecentMessages(50);
@@ -183,7 +189,23 @@ export const discordCodeDedupeService = {
         if (sourceCodes.length === 0) {
             throw new HttpError(400, "Target message does not contain any code tokens");
         }
-        const historyMessages = await fetchHistoryBeforeMessage(targetMessage.id, maxHistoryMessages);
+        const historyMessages = options.channelId
+            ? await fetchDiscordJson(`/channels/${options.channelId}/messages?limit=${Math.min(maxHistoryMessages, 100)}&before=${targetMessage.id}`)
+            : await fetchHistoryBeforeMessage(targetMessage.id, maxHistoryMessages);
+        // Continue paging history for thread/overridden channels beyond the first page.
+        if (options.channelId && historyMessages.length > 0 && historyMessages.length < maxHistoryMessages) {
+            let before = historyMessages[historyMessages.length - 1].id;
+            while (historyMessages.length < maxHistoryMessages) {
+                const remaining = maxHistoryMessages - historyMessages.length;
+                const batchSize = Math.min(100, remaining);
+                const batch = await fetchDiscordJson(`/channels/${options.channelId}/messages?limit=${batchSize}&before=${before}`);
+                if (batch.length === 0) {
+                    break;
+                }
+                historyMessages.push(...batch);
+                before = batch[batch.length - 1].id;
+            }
+        }
         const historyCodeSet = new Set();
         for (const message of historyMessages) {
             const tokens = extractCandidateCodes(message.content);
