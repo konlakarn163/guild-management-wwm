@@ -114,6 +114,15 @@ Super Admin:
 3. ใส่ redirect URL ของเว็บ เช่น http://localhost:3000/dashboard
 4. ตั้ง RLS ตาม policy ที่ทีมต้องการ (ตอนนี้ backend ใช้ service role key)
 
-## Keepalive
+## Keepalive (Render Free-Tier Limitation)
 
-Render free-tier อาจหยุดหลังจากไม่มี traffic เป็นช่วงเวลานาน ดังนั้นได้เพิ่ม GitHub Actions workflow ที่ยิง health endpoint ทุก 5 นาทีจาก [.github/workflows/keepalive.yml](.github/workflows/keepalive.yml)
+Render's free tier automatically **spins down services after 15 minutes of inactivity**. To keep the backend running:
+
+**GitHub Actions Workflow** (recommended):
+- [.github/workflows/keepalive.yml](.github/workflows/keepalive.yml) pings the health endpoint every 10 minutes
+- This wakes up the service before it fully sleeps
+- Note: First request after spin-down may fail (404), subsequent requests will succeed
+
+**Limitation**: This approach works best if you accept occasional short delays (5-15 sec) for the first request after the service has spun down.
+
+**Better Solution**: Upgrade to Render's Starter plan ($7/month) to keep the service always running without sleep.

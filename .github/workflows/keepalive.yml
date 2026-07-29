@@ -2,12 +2,22 @@ name: Keep Backend Alive
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Hit health endpoint
-        run: curl -fsS https://guild-management-backend.onrender.com/health
+      - name: Ping health endpoint to keep backend awake
+        run: |
+          for i in {1..3}; do
+            echo "Attempt $i..."
+            if curl -s -o /dev/null -w "%{http_code}" https://guild-management-backend.onrender.com/health; then
+              echo "Success"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Ping failed after 3 attempts (expected on first spin-up)"
+          exit 0

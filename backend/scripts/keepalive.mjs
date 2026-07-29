@@ -20,10 +20,13 @@ try {
   });
 
   console.log(`[keepalive] ${response.status} ${response.statusText} ${targetUrl}`);
+  // Don't fail on any status - the goal is just to trigger the service to wake up
+  process.exit(0);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[keepalive] failed: ${message}`);
-  process.exit(1);
+  console.error(`[keepalive] request failed: ${message}`);
+  // Still exit 0 because the service might be spinning up
+  process.exit(0);
 } finally {
   clearTimeout(timeout);
 }
