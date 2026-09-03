@@ -30,6 +30,8 @@ interface UniqueAllResult {
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 const CODE_PATTERN = /[A-Za-z0-9]{8,20}/g;
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function requireDiscordConfig() {
   if (!env.DISCORD_BOT_TOKEN) {
     throw new HttpError(500, "DISCORD_BOT_TOKEN is not configured");
@@ -141,6 +143,7 @@ async function fetchDiscordJson<T>(path: string): Promise<T> {
   const response = await fetch(`${DISCORD_API_BASE}${path}`, {
     headers: {
       Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
+      "User-Agent": "DiscordBot (GuildManagementSystem, 1.0.0)",
     },
   });
 
@@ -195,6 +198,10 @@ async function fetchHistoryBeforeMessage(
 
     history.push(...batch);
     before = batch[batch.length - 1]!.id;
+
+    if (history.length < maxMessages) {
+      await sleep(350);
+    }
   }
 
   return history;
@@ -221,6 +228,10 @@ async function fetchAllChannelMessages(
 
     messages.push(...batch);
     before = batch[batch.length - 1]!.id;
+
+    if (messages.length < maxMessages) {
+      await sleep(350);
+    }
   }
 
   return messages;
@@ -260,8 +271,8 @@ export const discordCodeDedupeService = {
     requireDiscordConfig();
 
     const maxHistoryMessages = Math.min(
-      Math.max(options.maxHistoryMessages ?? 1000, 1),
-      5000,
+      Math.max(options.maxHistoryMessages ?? 100, 1),
+      500,
     );
 
     let targetMessage: DiscordMessage;
@@ -320,6 +331,10 @@ export const discordCodeDedupeService = {
 
         historyMessages.push(...batch);
         before = batch[batch.length - 1]!.id;
+
+        if (historyMessages.length < maxHistoryMessages) {
+          await sleep(350);
+        }
       }
     }
     const historyCodeSet = new Set<string>();

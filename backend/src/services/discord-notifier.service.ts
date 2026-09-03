@@ -44,6 +44,7 @@ async function postDiscordMessage(content: string): Promise<void> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "User-Agent": "DiscordBot (GuildManagementSystem, 1.0.0)",
       },
       body: JSON.stringify({
         content,
@@ -61,9 +62,29 @@ async function postDiscordMessage(content: string): Promise<void> {
         response.status,
         body,
       );
+
+      let cleanErrorMsg = body;
+      if (body.trim().startsWith("<") || body.includes("<!doctype html>")) {
+        if (response.status === 429) {
+          cleanErrorMsg =
+            "Discord/Cloudflare is rate limiting server IP (429 Too Many Requests). Please try again in 1-2 minutes.";
+        } else {
+          cleanErrorMsg = `Discord returned HTML error page (${response.status})`;
+        }
+      } else {
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed.message) {
+            cleanErrorMsg = parsed.message;
+          }
+        } catch {
+          // ignore json parse error
+        }
+      }
+
       throw new HttpError(
-        500,
-        `Discord API returned error (${response.status}): ${body || response.statusText}`,
+        response.status === 429 ? 429 : 500,
+        `Discord API error (${response.status}): ${cleanErrorMsg}`,
       );
     }
   } catch (error) {
