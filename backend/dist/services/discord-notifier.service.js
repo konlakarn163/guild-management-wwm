@@ -1,10 +1,4 @@
-import fetch from "node-fetch";
-import { HttpsProxyAgent } from "https-proxy-agent";
 import { env } from "../config/env.js";
-
-const proxyUrl = env.DISCORD_PROXY_URL;
-const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
-
 function formatDayLabel(dayId) {
     const [yearText, monthText, dayText] = dayId.split("-");
     const year = Number(yearText);
@@ -23,7 +17,6 @@ function formatDayLabel(dayId) {
         timeZone: "UTC",
     });
 }
-
 async function postDiscordMessage(content) {
     if (!env.DISCORD_WEBHOOK_URL) {
         return;
@@ -35,7 +28,6 @@ async function postDiscordMessage(content) {
             headers: {
                 "Content-Type": "application/json",
             },
-            agent: agent,
             body: JSON.stringify({
                 content,
                 flags: 4,
@@ -53,7 +45,6 @@ async function postDiscordMessage(content) {
         console.warn("[DiscordNotifier] Failed to send message", error);
     }
 }
-
 export const discordNotifierService = {
     async notifyGuildWarWindowOpened(payload) {
         const mentionPrefix = env.DISCORD_NOTIFY_ROLE_ID
