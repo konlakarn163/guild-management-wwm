@@ -27,11 +27,6 @@ export const getRealtimeSocket = () => {
       transports: ["websocket", "polling"],
       withCredentials: true,
       reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 8000,
-      randomizationFactor: 0.5,
-      timeout: 20000,
     });
   }
 

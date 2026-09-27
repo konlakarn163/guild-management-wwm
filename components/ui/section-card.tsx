@@ -14,7 +14,7 @@ export function SectionCard({ title, subtitle, action, children, className, ...p
     <section
       {...props}
       className={cn(
-        "rounded-md border border-amber-100/10 bg-[#040a13]/90 p-6 text-slate-100 shadow-[0_20px_60px_rgba(0,0,0,0.65)] backdrop-blur transition-transform duration-200 ",
+        "rounded-md border border-amber-100/10 bg-[#040a13]/95 p-6 text-slate-100 shadow-[0_20px_60px_rgba(0,0,0,0.65)] transition-transform duration-200 ",
         className,
       )}
     >
