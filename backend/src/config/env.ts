@@ -18,10 +18,8 @@ const envSchema = z.object({
   DISCORD_WEBHOOK_URL: z.string().url().optional(),
   DISCORD_NOTIFY_ROLE_ID: z.string().min(1).optional(),
   DISCORD_BOT_TOKEN: z.string().min(1).optional(),
-  DISCORD_CODE_CHANNEL_ID: z.string().min(1).optional(),
-  DISCORD_CODE_REPORT_WEBHOOK_URL: z.string().url().optional(),
-  DISCORD_CODE_AUTOMATION_ENABLED: z.coerce.boolean().default(false),
-  RUN_DISCORD_AUTOMATION_ON_WEB: z.coerce.boolean().default(true),
+  DISCORD_COMMANDS_REPORT_WEBHOOK_URL: z.string().url().optional(),
+  RUN_COMMAND_ANNOUNCER_ON_WEB: z.coerce.boolean().default(true),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { HttpError } from "../utils/http-error.js";
 function formatDayLabel(dayId) {
     const [yearText, monthText, dayText] = dayId.split("-");
     const year = Number(yearText);
@@ -19,7 +20,7 @@ function formatDayLabel(dayId) {
 }
 async function postDiscordMessage(content) {
     if (!env.DISCORD_WEBHOOK_URL) {
-        return;
+        throw new HttpError(500, "DISCORD_WEBHOOK_URL is not configured in backend environment");
     }
     const mentionRoleId = env.DISCORD_NOTIFY_ROLE_ID;
     try {
@@ -27,6 +28,7 @@ async function postDiscordMessage(content) {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (GuildManagementSystem, 1.0.0)",
             },
             body: JSON.stringify({
                 content,
@@ -39,10 +41,38 @@ async function postDiscordMessage(content) {
         if (!response.ok) {
             const body = await response.text();
             console.warn("[DiscordNotifier] Failed to send message", response.status, body);
+            let cleanErrorMsg = body;
+            if (body.trim().startsWith("<") || body.includes("<!doctype html>")) {
+                if (response.status === 429) {
+                    cleanErrorMsg =
+                        "Discord/Cloudflare is rate limiting server IP (429 Too Many Requests). Please try again in 1-2 minutes.";
+                }
+                else {
+                    cleanErrorMsg = `Discord returned HTML error page (${response.status})`;
+                }
+            }
+            else {
+                try {
+                    const parsed = JSON.parse(body);
+                    if (parsed.message) {
+                        cleanErrorMsg = parsed.message;
+                    }
+                }
+                catch {
+                    // ignore json parse error
+                }
+            }
+            throw new HttpError(response.status === 429 ? 429 : 500, `Discord API error (${response.status}): ${cleanErrorMsg}`);
         }
     }
     catch (error) {
+        if (error instanceof HttpError) {
+            throw error;
+        }
         console.warn("[DiscordNotifier] Failed to send message", error);
+        throw new HttpError(500, error instanceof Error
+            ? error.message
+            : "Failed to post message to Discord");
     }
 }
 export const discordNotifierService = {
@@ -54,7 +84,12 @@ export const discordNotifierService = {
             `${mentionPrefix}Guild War registration is now 🟢 OPEN (เปิดลงทะเบียนกิลด์วอร์) ${payload.dayId} was opened now!!`,
             `ไปลงทะเบียนกันเถอะ!! Meow~ <https://meawmeaw-wwm.konlakarn.space/>`,
         ].join("\n");
-        await postDiscordMessage(content);
+        try {
+            await postDiscordMessage(content);
+        }
+        catch (error) {
+            console.warn("[DiscordNotifier] notifyGuildWarWindowOpened failed silently:", error);
+        }
     },
     async sendCustomNotice(message, mentionRole) {
         const mentionPrefix = mentionRole && env.DISCORD_NOTIFY_ROLE_ID
