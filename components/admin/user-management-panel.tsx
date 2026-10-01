@@ -292,6 +292,7 @@ export function UserManagementPanel() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="MEMBER">MEMBER</SelectItem>
+                      <SelectItem value="COMMAND">COMMAND</SelectItem>
                       <SelectItem value="ADMIN">ADMIN</SelectItem>
                       <SelectItem value="SUPER_ADMIN">SUPER_ADMIN</SelectItem>
                     </SelectContent>

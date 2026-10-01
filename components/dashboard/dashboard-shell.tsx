@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 // import { AdminApprovals } from "@/components/dashboard/admin-approvals";
 import { ProfileCard } from "@/components/dashboard/profile-card";
+import { CommandAnnouncementPanel } from "@/components/dashboard/command-announcement-panel";
 import { TeamBuilder } from "@/components/dashboard/team-builder";
 import { WarRegistration } from "@/components/dashboard/war-registration";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -67,10 +68,13 @@ export function DashboardShell() {
 
   const isSuperAdmin = profile?.role === "SUPER_ADMIN";
   const isActive = profile?.status === "ACTIVE";
+  const canUseCommandAnnouncements =
+    profile?.role === "COMMAND" || profile?.role === "ADMIN" || isSuperAdmin;
 
   return (
     <>
       <ProfileCard />
+      {canUseCommandAnnouncements ? <CommandAnnouncementPanel /> : null}
 
       {isLoadingProfile ? (
         <div className="space-y-3">

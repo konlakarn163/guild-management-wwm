@@ -11,7 +11,7 @@ services:
         value: production
       - key: FRONTEND_ORIGIN
         value: http://localhost:3000,https://meawmeaw-wwm.konlakarn.space
-      - key: RUN_DISCORD_AUTOMATION_ON_WEB
+      - key: RUN_COMMAND_ANNOUNCER_ON_WEB
         value: "false"
 
   - type: worker
@@ -23,5 +23,5 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DISCORD_CODE_AUTOMATION_ENABLED
-        value: "true"
+      - key: DISCORD_COMMANDS_REPORT_WEBHOOK_URL
+        sync: false
