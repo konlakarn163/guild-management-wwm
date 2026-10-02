@@ -1,6 +1,7 @@
 import { env } from "../config/env.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { HttpError } from "../utils/http-error.js";
+import { discordNotifierService } from "./discord-notifier.service.js";
 const ANNOUNCEMENT_DURATION_SECONDS = 1800;
 const TABLE = "command_announcements";
 let schedulerStarted = false;
@@ -16,19 +17,6 @@ async function loadState() {
         throw new Error(`Failed to load command announcement state: ${error.message}`);
     }
     return data;
-}
-async function sendToDiscord(content) {
-    if (!env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL) {
-        throw new Error("Discord command announcement credentials are not configured");
-    }
-    const response = await fetch(env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
-    });
-    if (!response.ok) {
-        throw new Error(`Discord webhook returned ${response.status}: ${await response.text()}`);
-    }
 }
 async function pollAnnouncements() {
     if (pollInProgress)
@@ -53,36 +41,46 @@ async function pollAnnouncements() {
         if (state.phase !== "running" || !state.started_at)
             return;
         const elapsedSeconds = Math.floor((now - Date.parse(state.started_at)) / 1000);
-        const announcementMessages = env.NODE_ENV === "development"
-            ? { ...state.messages, "1800": { msg: "เริ่มแล้ว" } }
-            : state.messages;
-        const dueTimes = Object.keys(announcementMessages)
+        const dueTimes = Object.keys(state.messages)
             .map(Number)
             .filter((secondsRemaining) => elapsedSeconds >= ANNOUNCEMENT_DURATION_SECONDS - secondsRemaining &&
             !state.sent_seconds.includes(secondsRemaining))
             .sort((left, right) => right - left);
-        for (const secondsRemaining of dueTimes) {
-            const message = announcementMessages[String(secondsRemaining)]?.msg;
-            if (!message)
-                continue;
-            await sendToDiscord(message);
-            console.log(`[CommandAnnouncements] Sent announcement at ${secondsRemaining}s remaining`);
-            const sentSeconds = [...state.sent_seconds, secondsRemaining];
-            const { error } = await supabaseAdmin
-                .from(TABLE)
-                .update({ sent_seconds: sentSeconds, updated_at: new Date().toISOString() })
-                .eq("id", 1);
-            if (error)
-                throw new Error(`Failed to persist sent announcement: ${error.message}`);
-            state.sent_seconds = sentSeconds;
+        try {
+            for (const secondsRemaining of dueTimes) {
+                const message = state.messages[String(secondsRemaining)]?.msg;
+                if (!message)
+                    continue;
+                await discordNotifierService.sendCustomNotice(message, false);
+                console.log(`[CommandAnnouncements] Sent announcement at ${secondsRemaining}s remaining`);
+                const sentSeconds = [...state.sent_seconds, secondsRemaining];
+                const { error } = await supabaseAdmin
+                    .from(TABLE)
+                    .update({ sent_seconds: sentSeconds, updated_at: new Date().toISOString() })
+                    .eq("id", 1);
+                if (error)
+                    throw new Error(`Failed to persist sent announcement: ${error.message}`);
+                state.sent_seconds = sentSeconds;
+            }
         }
-        if (elapsedSeconds >= ANNOUNCEMENT_DURATION_SECONDS) {
-            const { error } = await supabaseAdmin
-                .from(TABLE)
-                .update({ phase: "completed", updated_at: new Date().toISOString() })
-                .eq("id", 1);
-            if (error)
-                throw new Error(`Failed to complete command countdown: ${error.message}`);
+        finally {
+            if (elapsedSeconds >= ANNOUNCEMENT_DURATION_SECONDS) {
+                const { error } = await supabaseAdmin
+                    .from(TABLE)
+                    .update({
+                    phase: "idle",
+                    delay_seconds: 0,
+                    scheduled_start_at: null,
+                    started_at: null,
+                    sent_seconds: [],
+                    updated_at: new Date().toISOString(),
+                })
+                    .eq("id", 1)
+                    .eq("phase", "running")
+                    .eq("started_at", state.started_at);
+                if (error)
+                    throw new Error(`Failed to reset command countdown: ${error.message}`);
+            }
         }
     }
     finally {
@@ -151,11 +149,11 @@ export const commandAnnouncementService = {
         if (schedulerStarted)
             return;
         schedulerStarted = true;
-        if (!env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL) {
-            console.log("[CommandAnnouncements] Scheduler skipped: command webhook URL is missing");
+        if (!env.DISCORD_WEBHOOK_URL) {
+            console.log("[CommandAnnouncements] Scheduler skipped: Discord webhook URL is missing");
             return;
         }
-        console.log("[CommandAnnouncements] Scheduler started using command webhook");
+        console.log("[CommandAnnouncements] Scheduler started using Discord notice webhook");
         setInterval(() => {
             void pollAnnouncements().catch((error) => {
                 const now = Date.now();
