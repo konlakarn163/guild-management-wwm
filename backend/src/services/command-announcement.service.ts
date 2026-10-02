@@ -89,27 +89,38 @@ async function pollAnnouncements(): Promise<void> {
       )
       .sort((left, right) => right - left);
 
-    for (const secondsRemaining of dueTimes) {
-      const message = announcementMessages[String(secondsRemaining)]?.msg;
-      if (!message) continue;
+    try {
+      for (const secondsRemaining of dueTimes) {
+        const message = announcementMessages[String(secondsRemaining)]?.msg;
+        if (!message) continue;
 
-      await sendToDiscord(message);
-      console.log(`[CommandAnnouncements] Sent announcement at ${secondsRemaining}s remaining`);
-      const sentSeconds = [...state.sent_seconds, secondsRemaining];
-      const { error } = await supabaseAdmin
-        .from(TABLE)
-        .update({ sent_seconds: sentSeconds, updated_at: new Date().toISOString() })
-        .eq("id", 1);
-      if (error) throw new Error(`Failed to persist sent announcement: ${error.message}`);
-      state.sent_seconds = sentSeconds;
-    }
-
-    if (elapsedSeconds >= ANNOUNCEMENT_DURATION_SECONDS) {
-      const { error } = await supabaseAdmin
-        .from(TABLE)
-        .update({ phase: "completed", updated_at: new Date().toISOString() })
-        .eq("id", 1);
-      if (error) throw new Error(`Failed to complete command countdown: ${error.message}`);
+        await sendToDiscord(message);
+        console.log(`[CommandAnnouncements] Sent announcement at ${secondsRemaining}s remaining`);
+        const sentSeconds = [...state.sent_seconds, secondsRemaining];
+        const { error } = await supabaseAdmin
+          .from(TABLE)
+          .update({ sent_seconds: sentSeconds, updated_at: new Date().toISOString() })
+          .eq("id", 1);
+        if (error) throw new Error(`Failed to persist sent announcement: ${error.message}`);
+        state.sent_seconds = sentSeconds;
+      }
+    } finally {
+      if (elapsedSeconds >= ANNOUNCEMENT_DURATION_SECONDS) {
+        const { error } = await supabaseAdmin
+          .from(TABLE)
+          .update({
+            phase: "idle",
+            delay_seconds: 0,
+            scheduled_start_at: null,
+            started_at: null,
+            sent_seconds: [],
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", 1)
+          .eq("phase", "running")
+          .eq("started_at", state.started_at);
+        if (error) throw new Error(`Failed to reset command countdown: ${error.message}`);
+      }
     }
   } finally {
     pollInProgress = false;

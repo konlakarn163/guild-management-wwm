@@ -9,18 +9,8 @@ import {
 } from "../services/command-announcement.service.js";
 
 const messageSchema = z.object({ msg: z.string().trim().min(1).max(2000) }).strict();
-const messagesSchema = z.object({
-  "1560": messageSchema,
-  "1500": messageSchema,
-  "1260": messageSchema,
-  "1200": messageSchema,
-  "960": messageSchema,
-  "900": messageSchema,
-  "660": messageSchema,
-  "600": messageSchema,
-  "360": messageSchema,
-  "300": messageSchema,
-}).strict();
+const messageTimeSchema = z.string().regex(/^[1-9]\d{0,3}$/).refine((seconds) => Number(seconds) <= 1800);
+const messagesSchema = z.record(messageTimeSchema, messageSchema);
 const startSchema = z.object({
   delaySeconds: z.number().int().refine((value) => [0, 30, 60, 120, 180, 240].includes(value)),
 });
