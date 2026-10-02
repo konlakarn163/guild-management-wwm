@@ -51,7 +51,7 @@ async function pollAnnouncements() {
                 const message = state.messages[String(secondsRemaining)]?.msg;
                 if (!message)
                     continue;
-                await discordNotifierService.sendCustomNotice(message, false);
+                await discordNotifierService.sendCommandAnnouncement(message);
                 console.log(`[CommandAnnouncements] Sent announcement at ${secondsRemaining}s remaining`);
                 const sentSeconds = [...state.sent_seconds, secondsRemaining];
                 const { error } = await supabaseAdmin
@@ -149,11 +149,11 @@ export const commandAnnouncementService = {
         if (schedulerStarted)
             return;
         schedulerStarted = true;
-        if (!env.DISCORD_WEBHOOK_URL) {
-            console.log("[CommandAnnouncements] Scheduler skipped: Discord webhook URL is missing");
+        if (!env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL) {
+            console.log("[CommandAnnouncements] Scheduler skipped: command webhook URL is missing");
             return;
         }
-        console.log("[CommandAnnouncements] Scheduler started using Discord notice webhook");
+        console.log("[CommandAnnouncements] Scheduler started using command webhook");
         setInterval(() => {
             void pollAnnouncements().catch((error) => {
                 const now = Date.now();
