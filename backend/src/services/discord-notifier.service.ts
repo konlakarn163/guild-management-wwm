@@ -29,18 +29,21 @@ function formatDayLabel(dayId: string): string {
   });
 }
 
-async function postDiscordMessage(content: string): Promise<void> {
-  if (!env.DISCORD_WEBHOOK_URL) {
+async function postDiscordMessage(
+  content: string,
+  webhookUrl = env.DISCORD_WEBHOOK_URL,
+): Promise<void> {
+  if (!webhookUrl) {
     throw new HttpError(
       500,
-      "DISCORD_WEBHOOK_URL is not configured in backend environment",
+      "Discord webhook URL is not configured in backend environment",
     );
   }
 
   const mentionRoleId = env.DISCORD_NOTIFY_ROLE_ID;
 
   try {
-    const response = await fetch(env.DISCORD_WEBHOOK_URL, {
+    const response = await fetch(webhookUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -134,5 +137,9 @@ export const discordNotifierService = {
 
     const content = mentionPrefix + message;
     await postDiscordMessage(content);
+  },
+
+  async sendCommandAnnouncement(message: string): Promise<void> {
+    await postDiscordMessage(message, env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL);
   },
 };
