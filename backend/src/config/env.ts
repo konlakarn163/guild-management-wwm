@@ -16,6 +16,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_JWT_SECRET: z.string().min(1),
   DISCORD_WEBHOOK_URL: z.string().url().optional(),
+  DISCORD_WORKER_URL: z.string().url().optional(),
   DISCORD_NOTIFY_ROLE_ID: z.string().min(1).optional(),
   DISCORD_BOT_TOKEN: z.string().min(1).optional(),
   DISCORD_COMMANDS_REPORT_WEBHOOK_URL: z.string().url().optional(),

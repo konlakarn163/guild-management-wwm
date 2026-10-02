@@ -7,6 +7,8 @@ interface GuildWarWindowOpenedPayload {
   openedByUserId: string;
 }
 
+type DiscordMessageType = "notice" | "command";
+
 function formatDayLabel(dayId: string): string {
   const [yearText, monthText, dayText] = dayId.split("-");
   const year = Number(yearText);
@@ -31,32 +33,43 @@ function formatDayLabel(dayId: string): string {
 
 async function postDiscordMessage(
   content: string,
-  webhookUrl = env.DISCORD_WEBHOOK_URL,
+  type: DiscordMessageType,
+  webhookUrl = type === "command"
+    ? env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL
+    : env.DISCORD_WEBHOOK_URL,
 ): Promise<void> {
-  if (!webhookUrl) {
+  const useWorker = Boolean(env.DISCORD_WORKER_URL);
+
+  if (!useWorker && !webhookUrl) {
     throw new HttpError(
       500,
-      "Discord webhook URL is not configured in backend environment",
+      `Discord ${type} webhook URL is not configured in backend environment`,
     );
   }
 
   const mentionRoleId = env.DISCORD_NOTIFY_ROLE_ID;
+  const discordPayload = {
+    content,
+    flags: 4,
+    allowed_mentions: mentionRoleId
+      ? { parse: [], roles: [mentionRoleId] }
+      : { parse: [] },
+  };
 
   try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "DiscordBot (GuildManagementSystem, 1.0.0)",
+    const response = await fetch(
+      useWorker ? env.DISCORD_WORKER_URL! : webhookUrl!,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "DiscordBot (GuildManagementSystem, 1.0.0)",
+        },
+        body: JSON.stringify(
+          useWorker ? { ...discordPayload, type } : discordPayload,
+        ),
       },
-      body: JSON.stringify({
-        content,
-        flags: 4,
-        allowed_mentions: mentionRoleId
-          ? { parse: [], roles: [mentionRoleId] }
-          : { parse: [] },
-      }),
-    });
+    );
 
     if (!response.ok) {
       const body = await response.text();
@@ -118,7 +131,7 @@ export const discordNotifierService = {
     ].join("\n");
 
     try {
-      await postDiscordMessage(content);
+      await postDiscordMessage(content, "notice");
     } catch (error) {
       console.warn(
         "[DiscordNotifier] notifyGuildWarWindowOpened failed silently:",
@@ -136,10 +149,10 @@ export const discordNotifierService = {
       : "";
 
     const content = mentionPrefix + message;
-    await postDiscordMessage(content);
+    await postDiscordMessage(content, "notice");
   },
 
   async sendCommandAnnouncement(message: string): Promise<void> {
-    await postDiscordMessage(message, env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL);
+    await postDiscordMessage(message, "command");
   },
 };
