@@ -174,12 +174,15 @@ export const commandAnnouncementService = {
     if (schedulerStarted) return;
     schedulerStarted = true;
 
-    if (!env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL) {
+    const workerConfigured = Boolean(env.DISCORD_WORKER_URL);
+    if (!workerConfigured && !env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL) {
       console.log("[CommandAnnouncements] Scheduler skipped: command webhook URL is missing");
       return;
     }
 
-    console.log("[CommandAnnouncements] Scheduler started using command webhook");
+    console.log(
+      `[CommandAnnouncements] Scheduler started using ${workerConfigured ? "Discord worker" : "command webhook"}`,
+    );
     setInterval(() => {
       void pollAnnouncements().catch((error: unknown) => {
         const now = Date.now();
