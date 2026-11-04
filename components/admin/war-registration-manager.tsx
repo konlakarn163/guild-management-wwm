@@ -6,6 +6,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { SectionCard } from "@/components/ui/section-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/client-auth";
@@ -142,6 +143,7 @@ function RegistrationGroup({
 }
 
 export function WarRegistrationManager() {
+  const confirm = useConfirm();
   const [windows, setWindows] = useState<GuildWarRegistrationWindow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -271,9 +273,11 @@ export function WarRegistrationManager() {
   };
 
   const handleDelete = async (id: string, dayId: string) => {
-    const confirmed = window.confirm(
-      `Delete registration window for ${dayId}? This will also delete all registrations and team assignments for that day.`,
-    );
+    const confirmed = await confirm({
+      title: "Delete registration window",
+      confirmLabel: "Delete",
+      message: `Delete registration window for ${dayId}? This will also delete all registrations and team assignments for that day.`,
+    });
     if (!confirmed) {
       return;
     }
@@ -305,9 +309,11 @@ export function WarRegistrationManager() {
   };
 
   const handleCleanupOldRegistrations = async () => {
-    const confirmed = window.confirm(
-      "Delete previous months registrations and old existing windows? This will also remove related team assignments. This cannot be undone.",
-    );
+    const confirmed = await confirm({
+      title: "Clean up old registrations",
+      confirmLabel: "Clean up",
+      message: "Delete previous months registrations and old existing windows? This will also remove related team assignments. This cannot be undone.",
+    });
     if (!confirmed) {
       return;
     }

@@ -18,7 +18,8 @@ export default async function DashboardPage() {
           className="relative mt-16 rounded-2xl border border-amber-100/10 bg-[#040a13]/90 px-6 py-6 shadow-[0_20px_60px_rgba(0,0,0,0.65)] md:px-8 md:py-8"
         >
           <PeekingCat className="absolute -top-[4.4rem] right-[18%] w-28" />
-          <YarnBall className="pointer-events-none absolute -top-9 left-[10%] h-10 w-12 motion-safe:animate-[cat-roll_5s_ease-in-out_infinite]" />          <span className="absolute -top-12 right-[calc(18%+7.5rem)] hidden rounded-2xl rounded-br-sm border border-amber-300/30 bg-[#0a1320] px-3 py-1 text-sm font-semibold text-amber-100 motion-safe:animate-[cat-wiggle_2.4s_ease-in-out_infinite] sm:block">
+          <YarnBall className="pointer-events-none absolute -top-9 left-[10%] h-10 w-12 motion-safe:animate-[cat-roll_5s_ease-in-out_infinite]" />
+          <span className="absolute -top-12 right-[calc(18%+7.5rem)] hidden rounded-2xl rounded-br-sm border border-amber-300/30 bg-[#0a1320] px-3 py-1 text-sm font-semibold text-amber-100 motion-safe:animate-[cat-wiggle_2.4s_ease-in-out_infinite] sm:block">
             เหมียว~
           </span>
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">

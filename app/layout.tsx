@@ -2,6 +2,7 @@ import { Bebas_Neue, IBM_Plex_Sans_Thai, Kalam } from "next/font/google";
 import { SiteFooter } from "@/components/public/site-footer";
 import { LanguageProvider } from "@/components/providers/language-provider";
 import { ToastProvider } from "@/components/providers/toast-provider";
+import { ConfirmProvider } from "@/components/providers/confirm-provider";
 import "react-toastify/dist/ReactToastify.css";
 import "./globals.css";
 import type { Metadata } from "next";
@@ -47,9 +48,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="th" className={`${display.variable} ${body.variable} ${script.variable} antialiased`}>
       <body>
         <LanguageProvider>
-          {children}
-          <ToastProvider />
-          <SiteFooter />
+          <ConfirmProvider>
+            {children}
+            <ToastProvider />
+            <SiteFooter />
+          </ConfirmProvider>
         </LanguageProvider>
       </body>
     </html>

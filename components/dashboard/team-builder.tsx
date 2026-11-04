@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, ExternalLink } from "lucide-react";
+import { Camera, ExternalLink, Send } from "lucide-react";
 import { toBlob } from "html-to-image";
 import { toast } from "react-toastify";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,6 @@ import { getAccessToken } from "@/lib/client-auth";
 import { getRealtimeSocket } from "@/lib/realtime";
 import type {
   BuildOption,
-  GuildWarRegistration,
   GuildWarRegistrationWindow,
   GuildWarTeam,
   GuildWarTeamType,
@@ -292,6 +291,7 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   const [teamDefinitions, setTeamDefinitions] = useState<TeamDefinition[]>([]);
   const [search, setSearch] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isSendingCapture, setIsSendingCapture] = useState(false);
   const captureRef = useRef<HTMLDivElement>(null);
   const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
   const [isLoadingPool, setIsLoadingPool] = useState(true);
@@ -704,14 +704,8 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     );
   };
 
-  const onCapture = async () => {
-    const node = captureRef.current?.closest("section");
-    if (!node) {
-      return;
-    }
-
-    setIsCapturing(true);
-    const blobPromise = toBlob(node, {
+  const captureBlob = (node: HTMLElement) =>
+    toBlob(node, {
       pixelRatio: 2,
       backgroundColor: "#040a13",
       filter: (element) => !(element instanceof HTMLElement && element.dataset.captureIgnore !== undefined),
@@ -721,6 +715,53 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
       }
       return blob;
     });
+
+  const onCaptureAndSend = async () => {
+    const node = captureRef.current?.closest("section");
+    if (!node) {
+      return;
+    }
+
+    setIsSendingCapture(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        toast.error("Please login first");
+        return;
+      }
+
+      const blob = await captureBlob(node);
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+
+      await apiFetch("/api/guild-war/notices/send-image", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          image: dataUrl,
+          filename: `team-builder-${selectedDayId || "teams"}.png`,
+        }),
+      });
+      toast.success("ส่งรูปไป Discord แล้ว");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "ส่งรูปไป Discord ไม่สำเร็จ");
+    } finally {
+      setIsSendingCapture(false);
+    }
+  };
+
+  const onCapture = async () => {
+    const node = captureRef.current?.closest("section");
+    if (!node) {
+      return;
+    }
+
+    setIsCapturing(true);
+    const blobPromise = captureBlob(node);
 
     try {
       try {
@@ -763,6 +804,18 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
             <Camera className="h-4 w-4" />
             {isCapturing ? "Capturing..." : "Capture"}
           </Button>
+          {canDrag ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void onCaptureAndSend()}
+              disabled={isSendingCapture}
+              className="rounded-xl"
+            >
+              <Send className="h-4 w-4" />
+              {isSendingCapture ? "Sending..." : "Capture & Send to Discord"}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
