@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/section-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/client-auth";
 import type {
@@ -68,6 +69,7 @@ function TeamRowSkeleton() {
 }
 
 export function TeamManagementPanel() {
+  const confirm = useConfirm();
   const [teams, setTeams] = useState<GuildWarTeam[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -189,7 +191,7 @@ export function TeamManagementPanel() {
   };
 
   const removeTeam = async (team: GuildWarTeam) => {
-    if (!window.confirm(`Delete team \"${team.name}\"?`)) {
+    if (!(await confirm({ title: "Delete team", message: `Delete team "${team.name}"?`, confirmLabel: "Delete" }))) {
       return;
     }
 
@@ -221,6 +223,7 @@ export function TeamManagementPanel() {
 
   return (
     <SectionCard
+      cat
       title="Guild War Teams"
       subtitle="Create, edit, delete teams, and choose a color for each one"
     >

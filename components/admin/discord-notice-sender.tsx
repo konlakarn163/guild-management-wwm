@@ -46,7 +46,7 @@ export function DiscordNoticeSender() {
   };
 
   return (
-    <SectionCard title="Send Discord Notice">
+    <SectionCard cat title="Send Discord Notice">
       <div className="flex flex-col gap-3">
         <textarea
           value={noticeMessage}

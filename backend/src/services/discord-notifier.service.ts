@@ -117,6 +117,85 @@ async function postDiscordMessage(
   }
 }
 
+async function postDiscordImage(
+  imageBase64: string,
+  filename: string,
+  content: string,
+): Promise<void> {
+  const webhookUrl = env.DISCORD_WEBHOOK_URL;
+  const workerUrl = env.DISCORD_WORKER_URL;
+
+  if (!webhookUrl && !workerUrl) {
+    throw new HttpError(
+      500,
+      "Discord notice webhook URL is not configured in backend environment",
+    );
+  }
+
+  const discordPayload = {
+    content,
+    allowed_mentions: { parse: [] },
+    attachments: [{ id: 0, filename }],
+  };
+
+  let response: globalThis.Response;
+  try {
+    if (webhookUrl) {
+      const form = new FormData();
+      form.append("payload_json", JSON.stringify(discordPayload));
+      form.append(
+        "files[0]",
+        new Blob([Buffer.from(imageBase64, "base64")], { type: "image/png" }),
+        filename,
+      );
+      response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "User-Agent": "DiscordBot (GuildManagementSystem, 1.0.0)" },
+        body: form,
+      });
+    } else {
+      response = await fetch(workerUrl!, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "DiscordBot (GuildManagementSystem, 1.0.0)",
+        },
+        body: JSON.stringify({
+          ...discordPayload,
+          type: "notice",
+          file: { filename, contentType: "image/png", data: imageBase64 },
+        }),
+      });
+    }
+  } catch (error) {
+    console.warn("[DiscordNotifier] Failed to send image", error);
+    throw new HttpError(
+      500,
+      error instanceof Error ? error.message : "Failed to post image to Discord",
+    );
+  }
+
+  if (!response.ok) {
+    const body = await response.text();
+    console.warn("[DiscordNotifier] Failed to send image", response.status, body);
+    let cleanErrorMsg = body;
+    try {
+      const parsed = JSON.parse(body);
+      if (parsed.message) {
+        cleanErrorMsg = parsed.message;
+      }
+    } catch {
+      if (body.trim().startsWith("<")) {
+        cleanErrorMsg = `Discord returned HTML error page (${response.status})`;
+      }
+    }
+    throw new HttpError(
+      response.status === 429 ? 429 : 500,
+      `Discord API error (${response.status}): ${cleanErrorMsg}`,
+    );
+  }
+}
+
 export const discordNotifierService = {
   async notifyGuildWarWindowOpened(
     payload: GuildWarWindowOpenedPayload,
@@ -150,6 +229,14 @@ export const discordNotifierService = {
 
     const content = mentionPrefix + message;
     await postDiscordMessage(content, "notice");
+  },
+
+  async sendNoticeImage(
+    imageBase64: string,
+    filename: string,
+    message?: string,
+  ): Promise<void> {
+    await postDiscordImage(imageBase64, filename, message ?? "");
   },
 
   async sendCommandAnnouncement(message: string): Promise<void> {

@@ -29,6 +29,12 @@ const sendCustomNoticeSchema = z.object({
   mentionRole: z.boolean(),
 });
 
+const sendNoticeImageSchema = z.object({
+  image: z.string().min(1),
+  filename: z.string().regex(/^[\w.-]{1,100}\.png$/).default("capture.png"),
+  message: z.string().max(2000).optional(),
+});
+
 const windowIdSchema = z.object({
   id: z.string().uuid(),
 });
@@ -86,6 +92,11 @@ export const guildWarController = {
     assertAdmin(req);
     const { id } = windowIdSchema.parse(req.params);
     const window = await guildWarService.setWindowOpenState(id, true);
+    try {
+      await guildWarService.autoRegisterOnWindowOpen(window.day_id, window.week_id);
+    } catch (error) {
+      console.error("Auto-register on window open failed:", error);
+    }
     await discordNotifierService.notifyGuildWarWindowOpened({
       dayId: window.day_id,
       weekId: window.week_id,
@@ -240,6 +251,14 @@ export const guildWarController = {
     assertAdmin(req);
     const payload = sendCustomNoticeSchema.parse(req.body);
     await discordNotifierService.sendCustomNotice(payload.message, payload.mentionRole);
+    res.json({ success: true });
+  }),
+
+  sendNoticeImage: asyncHandler(async (req: Request, res: Response) => {
+    assertAdmin(req);
+    const payload = sendNoticeImageSchema.parse(req.body);
+    const image = payload.image.replace(/^data:image\/png;base64,/, "");
+    await discordNotifierService.sendNoticeImage(image, payload.filename, payload.message);
     res.json({ success: true });
   }),
 

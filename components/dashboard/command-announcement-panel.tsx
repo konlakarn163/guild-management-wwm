@@ -11,6 +11,7 @@ import type {
   CommandAnnouncementState,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { SectionCard } from "@/components/ui/section-card";
 
 const API_PATH = "/api/command-announcements";
 const ANNOUNCEMENT_DURATION_SECONDS = 1800;
@@ -367,20 +368,19 @@ export function CommandAnnouncementPanel() {
   const isCountdownActive = state?.phase === "waiting" || state?.phase === "running";
 
   return (
-    <section className="rounded-md border border-amber-100/10 bg-[#040a13]/90 p-5 text-slate-100 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-amber-100/10 pb-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-300/80">Guild control</p>
-          <h2 className="mt-1 text-xl font-bold text-white">Command announce</h2>
-        </div>
+    <SectionCard
+      cat
+      title="Command announce"
+      subtitle="ตั้งเวลาและข้อความที่บอทจะประกาศใน Discord ระหว่าง Guild War"
+      action={
         <div className="min-w-32 text-right">
           <p className="text-xs text-slate-400">{timer.label}</p>
           <p className="font-mono text-3xl font-semibold tabular-nums text-amber-200">{timer.time}</p>
           <p className="text-xs text-slate-400">{statusLabel}</p>
         </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2" aria-label="เวลาเริ่มรอบ">
+      }
+    >
+      <div className="flex flex-wrap gap-2" aria-label="เวลาเริ่มรอบ">
         {START_OPTIONS.map((option) => (
           <button
             key={option.seconds}
@@ -688,6 +688,6 @@ export function CommandAnnouncementPanel() {
           </div>
         </div>
       ) : null}
-    </section>
+    </SectionCard>
   );
 }

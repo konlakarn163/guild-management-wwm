@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, Swords } from "lucide-react";
+import { CatFace } from "@/components/public/cat-decor";
 import { SectionCard } from "@/components/ui/section-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,6 +132,7 @@ export function ProfileCard() {
   if (isInitialLoading) {
     return (
       <SectionCard
+        cat
         title="Profile"
         subtitle="Character Name / Build จะถูกใช้ในการจัดทีม Guild War และต้องอัปเดตให้ตรงกับในเกม"
       >
@@ -153,12 +155,17 @@ export function ProfileCard() {
 
   return (
     <SectionCard
+      cat
       title="Profile"
       subtitle="Character Name / Build จะถูกใช้ในการจัดทีม Guild War และต้องอัปเดตให้ตรงกับในเกม"
     >
       {!showForm ? (
         <div className="space-y-3">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-sm text-slate-300">
+          <div className="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-sm text-slate-300">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-amber-300/25 bg-amber-300/10">
+              <CatFace mood={profileStatus === "ACTIVE" ? "success" : "warning"} className="h-9 w-9" />
+            </span>
+            <div>
             <p>
               <span className="font-semibold text-slate-100">Character:</span> {characterName || "-"}
             </p>
@@ -177,6 +184,7 @@ export function ProfileCard() {
               )}
             </p>
             <p className="mt-1 text-xs text-slate-400">Status: {statusText}</p>
+            </div>
           </div>
           <Button type="button" className="h-11 rounded-xl" onClick={() => setIsEditMode(true)}>
             แก้ไข Profile

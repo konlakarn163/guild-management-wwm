@@ -131,7 +131,7 @@ export function GuildSettingsForm() {
   };
 
   return (
-    <SectionCard title="Super Admin Controls" subtitle="Manage admin users and edit guild public profile">
+    <SectionCard cat title="Super Admin Controls" subtitle="Manage admin users and edit guild public profile">
       <div className="grid gap-3 md:grid-cols-2">
        
         <div className="md:col-span-2 space-y-2">

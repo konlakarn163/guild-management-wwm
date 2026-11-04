@@ -16,6 +16,12 @@ export async function getCurrentUser() {
   return data.user;
 }
 
+export async function getSessionUser() {
+  const supabaseBrowser = getSupabaseBrowserClient();
+  const { data } = await supabaseBrowser.auth.getSession();
+  return data.session?.user ?? null;
+}
+
 export function getUserRole(user: User | null): UserRole {
   const rawRole =
     user?.user_metadata?.role ??

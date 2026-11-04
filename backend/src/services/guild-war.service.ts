@@ -31,6 +31,7 @@ interface OpenWindowRegistrations {
 }
 
 const MAX_OPEN_WINDOWS = 2;
+const AUTO_REGISTER_DISCORD_ID = "716108795750645802";
 
 async function listTeamsForDay(dayId: string) {
   const [teamsResult, teamMembersResult] = await Promise.all([
@@ -692,6 +693,24 @@ export const guildWarService = {
     await clearTeamMembershipByDay(openWindow.day_id, userId);
 
     return upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
+  },
+
+  async autoRegisterOnWindowOpen(dayId: string, weekId: string) {
+    const { data: user, error } = await supabaseAdmin
+      .from("users")
+      .select("id, status")
+      .eq("discord_id", AUTO_REGISTER_DISCORD_ID)
+      .maybeSingle();
+
+    if (error) {
+      throw new HttpError(500, error.message);
+    }
+
+    if (!user || user.status !== "ACTIVE") {
+      return null;
+    }
+
+    return upsertRegistration(user.id, dayId, weekId);
   },
 
   async forceRegisterByDay(dayId: string, characterName: string, build: string) {

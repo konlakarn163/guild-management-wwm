@@ -58,7 +58,7 @@ app.options("*", cors(corsOptions));
 // import helmet from "helmet";
 // app.use(helmet());
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "15mb" }));
 app.use(morgan("dev"));
 
 app.get("/", (_req, res) => {
