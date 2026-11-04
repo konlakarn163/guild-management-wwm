@@ -1,5 +1,6 @@
 import { env } from "../config/env.js";
 import { HttpError } from "../utils/http-error.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 
 interface GuildWarWindowOpenedPayload {
   dayId: string;
@@ -34,6 +35,7 @@ function formatDayLabel(dayId: string): string {
 async function postDiscordMessage(
   content: string,
   type: DiscordMessageType,
+  suppressEmbeds = true,
   webhookUrl = type === "command"
     ? env.DISCORD_COMMANDS_REPORT_WEBHOOK_URL
     : env.DISCORD_WEBHOOK_URL,
@@ -50,7 +52,7 @@ async function postDiscordMessage(
   const mentionRoleId = env.DISCORD_NOTIFY_ROLE_ID;
   const discordPayload = {
     content,
-    flags: 4,
+    ...(suppressEmbeds ? { flags: 4 } : {}),
     allowed_mentions: mentionRoleId
       ? { parse: [], roles: [mentionRoleId] }
       : { parse: [] },
@@ -117,83 +119,43 @@ async function postDiscordMessage(
   }
 }
 
+const CAPTURE_BUCKET = "discord-captures";
+
 async function postDiscordImage(
   imageBase64: string,
   filename: string,
   content: string,
 ): Promise<void> {
-  const webhookUrl = env.DISCORD_WEBHOOK_URL;
-  const workerUrl = env.DISCORD_WORKER_URL;
-
-  if (!webhookUrl && !workerUrl) {
-    throw new HttpError(
-      500,
-      "Discord notice webhook URL is not configured in backend environment",
+  const { data: bucket } = await supabaseAdmin.storage.getBucket(CAPTURE_BUCKET);
+  if (!bucket) {
+    const { error: bucketError } = await supabaseAdmin.storage.createBucket(
+      CAPTURE_BUCKET,
+      { public: true },
     );
-  }
-
-  const discordPayload = {
-    content,
-    allowed_mentions: { parse: [] },
-    attachments: [{ id: 0, filename }],
-  };
-
-  let response: globalThis.Response;
-  try {
-    if (webhookUrl) {
-      const form = new FormData();
-      form.append("payload_json", JSON.stringify(discordPayload));
-      form.append(
-        "files[0]",
-        new Blob([Buffer.from(imageBase64, "base64")], { type: "image/png" }),
-        filename,
-      );
-      response = await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "User-Agent": "DiscordBot (GuildManagementSystem, 1.0.0)" },
-        body: form,
-      });
-    } else {
-      response = await fetch(workerUrl!, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "DiscordBot (GuildManagementSystem, 1.0.0)",
-        },
-        body: JSON.stringify({
-          ...discordPayload,
-          type: "notice",
-          file: { filename, contentType: "image/png", data: imageBase64 },
-        }),
-      });
+    if (bucketError && !/already exists/i.test(bucketError.message)) {
+      throw new HttpError(500, `Failed to create storage bucket: ${bucketError.message}`);
     }
-  } catch (error) {
-    console.warn("[DiscordNotifier] Failed to send image", error);
-    throw new HttpError(
-      500,
-      error instanceof Error ? error.message : "Failed to post image to Discord",
-    );
   }
 
-  if (!response.ok) {
-    const body = await response.text();
-    console.warn("[DiscordNotifier] Failed to send image", response.status, body);
-    let cleanErrorMsg = body;
-    try {
-      const parsed = JSON.parse(body);
-      if (parsed.message) {
-        cleanErrorMsg = parsed.message;
-      }
-    } catch {
-      if (body.trim().startsWith("<")) {
-        cleanErrorMsg = `Discord returned HTML error page (${response.status})`;
-      }
-    }
-    throw new HttpError(
-      response.status === 429 ? 429 : 500,
-      `Discord API error (${response.status}): ${cleanErrorMsg}`,
-    );
+  const objectPath = `${Date.now()}-${filename}`;
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from(CAPTURE_BUCKET)
+    .upload(objectPath, Buffer.from(imageBase64, "base64"), {
+      contentType: "image/png",
+    });
+  if (uploadError) {
+    throw new HttpError(500, `Failed to upload capture: ${uploadError.message}`);
   }
+
+  const {
+    data: { publicUrl },
+  } = supabaseAdmin.storage.from(CAPTURE_BUCKET).getPublicUrl(objectPath);
+
+  await postDiscordMessage(
+    content ? `${content}\n${publicUrl}` : publicUrl,
+    "notice",
+    false,
+  );
 }
 
 export const discordNotifierService = {
