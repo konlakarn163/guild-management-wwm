@@ -1,4 +1,4 @@
-export type UserRole = "MEMBER" | "ADMIN" | "SUPER_ADMIN";
+export type UserRole = "MEMBER" | "ADMIN" | "SUPER_ADMIN" | "COMMAND";
 export type UserStatus = "PENDING" | "ACTIVE" | "REJECTED";
 
 export interface AuthUser {

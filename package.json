@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm:dev:web\" \"npm:dev:api\"",
+    "dev": "concurrently \"node node_modules/next/dist/bin/next dev\" \"node backend/node_modules/tsx/dist/cli.mjs watch backend/src/server.ts\"",
     "dev:web": "next dev",
-    "dev:api": "npm --prefix backend run dev",
+    "dev:api": "cd backend && yarn dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

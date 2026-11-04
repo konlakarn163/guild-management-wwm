@@ -7,11 +7,20 @@
 }
 
 html {
-  scroll-behavior: auto;
+  /* Native smooth scrolling for anchor jumps (e.g. "View Schedule" -> #schedule).
+     This is GPU-friendly and does not repaint on every frame like GSAP
+     ScrollSmoother did. */
+  scroll-behavior: smooth;
   height: 100%;
   width: 100%;
   overflow: auto;
   scrollbar-gutter: stable;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 @theme inline {

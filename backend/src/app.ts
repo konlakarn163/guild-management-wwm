@@ -11,6 +11,7 @@ import { profileRouter } from "./routes/profile.route.js";
 import { publicRouter } from "./routes/public.route.js";
 import { teamsRouter } from "./routes/teams.route.js";
 import { usersRouter } from "./routes/users.route.js";
+import { commandAnnouncementRouter } from "./routes/command-announcement.route.js";
 
 export const app = express();
 
@@ -76,6 +77,7 @@ app.use("/api/guild-war", guildWarRouter);
 app.use("/api/teams", teamsRouter);
 app.use("/api/map-strategies", mapStrategiesRouter);
 app.use("/api/guild-settings", guildSettingsRouter);
+app.use("/api/command-announcements", commandAnnouncementRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

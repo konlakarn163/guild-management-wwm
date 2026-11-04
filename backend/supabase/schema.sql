@@ -1,7 +1,9 @@
 do $$ begin
-  create type public.user_role as enum ('MEMBER', 'ADMIN', 'SUPER_ADMIN');
+  create type public.user_role as enum ('MEMBER', 'ADMIN', 'SUPER_ADMIN', 'COMMAND');
 exception when duplicate_object then null;
 end $$;
+
+alter type public.user_role add value if not exists 'COMMAND';
 
 do $$ begin
   create type public.user_status as enum ('PENDING', 'ACTIVE', 'REJECTED');
@@ -76,6 +78,33 @@ create table if not exists public.users (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists public.command_announcements (
+  id smallint primary key default 1 check (id = 1),
+  messages jsonb not null default '{}'::jsonb,
+  phase text not null default 'idle' check (phase in ('idle', 'waiting', 'running', 'completed')),
+  delay_seconds integer not null default 0 check (delay_seconds in (0, 30, 60, 120, 180, 240)),
+  scheduled_start_at timestamptz,
+  started_at timestamptz,
+  sent_seconds integer[] not null default '{}',
+  updated_by uuid references public.users(id),
+  updated_at timestamptz not null default now()
+);
+
+insert into public.command_announcements (id, messages)
+values (1, '{
+  "1560": {"msg": "อีก 1 นาที ป่าจะเกิด บอสตัวแรกจะเกิดด้วย"},
+  "1500": {"msg": "ป่าเกิดแล้ว เช็คบอสตัวแรกด้วย"},
+  "1260": {"msg": "อีก 1 นาที ป่าจะเกิด และเข้า Half-time"},
+  "1200": {"msg": "เข้าสู่ Half-time"},
+  "960": {"msg": "อีก 1 นาที ป่าจะเกิด บอสตัวที่สองจะเกิดด้วย"},
+  "900": {"msg": "ป่าเกิดแล้ว เช็คบอสตัวที่สองด้วย"},
+  "660": {"msg": "อีก 1 นาที ป่าจะเกิด"},
+  "600": {"msg": "ป่าเกิดแล้ว"},
+  "360": {"msg": "อีก 1 นาที ป่าจะเกิด"},
+  "300": {"msg": "ป่าเกิดแล้ว"}
+}'::jsonb)
+on conflict (id) do nothing;
 
 create table if not exists public.guild_war_registrations (
   id uuid primary key default gen_random_uuid(),
@@ -272,6 +301,7 @@ alter table public.guild_war_registration_windows    enable row level security;
 alter table public.teams                             enable row level security;
 alter table public.team_members                      enable row level security;
 alter table public.map_strategies                    enable row level security;
+alter table public.command_announcements             enable row level security;
 
 -- ---- build_options ----
 drop policy if exists "Public can read build options" on public.build_options;

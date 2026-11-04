@@ -1,5 +1,25 @@
-export type UserRole = "MEMBER" | "ADMIN" | "SUPER_ADMIN";
+export type UserRole = "MEMBER" | "ADMIN" | "SUPER_ADMIN" | "COMMAND";
 export type UserStatus = "PENDING" | "ACTIVE" | "REJECTED";
+
+export interface CommandAnnouncementMessages {
+  [secondsRemaining: string]: { msg: string };
+}
+
+export interface CommandAnnouncementState {
+  id: number;
+  messages: CommandAnnouncementMessages;
+  phase: "idle" | "waiting" | "running" | "completed";
+  delay_seconds: number;
+  scheduled_start_at: string | null;
+  started_at: string | null;
+  sent_seconds: number[];
+  updated_at: string;
+}
+
+export type CommandAnnouncementRealtimeUpdate = Pick<
+  CommandAnnouncementState,
+  "phase" | "delay_seconds" | "scheduled_start_at" | "started_at" | "sent_seconds" | "updated_at"
+>;
 
 export interface BuildOption {
   label: string;

@@ -1,4 +1,4 @@
-import { startDiscordCodeAutomation } from "./services/discord-code-automation.service.js";
+import { commandAnnouncementService } from "./services/command-announcement.service.js";
 
-console.log("[DiscordCodeAutomation] Worker starting");
-void startDiscordCodeAutomation();
+console.log("[DiscordWorker] Command announcement scheduler starting");
+commandAnnouncementService.startScheduler();
