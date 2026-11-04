@@ -86,6 +86,11 @@ export const guildWarController = {
     assertAdmin(req);
     const { id } = windowIdSchema.parse(req.params);
     const window = await guildWarService.setWindowOpenState(id, true);
+    try {
+      await guildWarService.autoRegisterOnWindowOpen(window.day_id, window.week_id);
+    } catch (error) {
+      console.error("Auto-register on window open failed:", error);
+    }
     await discordNotifierService.notifyGuildWarWindowOpened({
       dayId: window.day_id,
       weekId: window.week_id,

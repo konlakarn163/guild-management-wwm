@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Camera, ExternalLink } from "lucide-react";
+import { toBlob } from "html-to-image";
 import { toast } from "react-toastify";
 import { Input } from "@/components/ui/input";
+import { SleepingCat } from "@/components/public/cat-decor";
 import { SectionCard } from "@/components/ui/section-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -237,7 +239,8 @@ function DropZone({
             />
           ))
         ) : (
-          <p className="rounded-xl border border-dashed border-slate-700 px-3 py-3 text-xs text-slate-400">
+          <p className="flex items-center gap-3 rounded-xl border border-dashed border-slate-700 px-3 py-3 text-xs text-slate-400">
+            <SleepingCat className="h-7 w-11 shrink-0 text-amber-200/70" />
             No matching members
           </p>
         )}
@@ -288,6 +291,8 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   const [teamIdByName, setTeamIdByName] = useState<Record<string, string>>({});
   const [teamDefinitions, setTeamDefinitions] = useState<TeamDefinition[]>([]);
   const [search, setSearch] = useState("");
+  const [isCapturing, setIsCapturing] = useState(false);
+  const captureRef = useRef<HTMLDivElement>(null);
   const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
   const [isLoadingPool, setIsLoadingPool] = useState(true);
   const [openWindows, setOpenWindows] = useState<GuildWarRegistrationWindow[]>(
@@ -699,8 +704,47 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     );
   };
 
+  const onCapture = async () => {
+    const node = captureRef.current?.closest("section");
+    if (!node) {
+      return;
+    }
+
+    setIsCapturing(true);
+    const blobPromise = toBlob(node, {
+      pixelRatio: 2,
+      backgroundColor: "#040a13",
+      filter: (element) => !(element instanceof HTMLElement && element.dataset.captureIgnore !== undefined),
+    }).then((blob) => {
+      if (!blob) {
+        throw new Error("Capture failed");
+      }
+      return blob;
+    });
+
+    try {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blobPromise })]);
+        toast.success("คัดลอกรูปแล้ว กด Ctrl+V เพื่อวางได้เลย");
+      } catch {
+        const url = URL.createObjectURL(await blobPromise);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `team-builder-${selectedDayId || "teams"}.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast.success("เบราว์เซอร์นี้คัดลอกรูปไม่ได้ เลยดาวน์โหลดไฟล์ให้แทน");
+      }
+    } catch {
+      toast.error("Capture ไม่สำเร็จ ลองใหม่อีกครั้ง");
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
   return (
     <SectionCard
+      cat
       title="Guild War Team Builder"
       subtitle={
         canDrag
@@ -708,15 +752,27 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
           : "Read-only mode. Only ADMIN/SUPER_ADMIN can move and arrange teams."
       }
       action={
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => window.open("https://gvgmapwwm.vcross.gg/", "_blank")}
-          className="rounded-xl"
-        >
-          <ExternalLink className="h-4 w-4" />
-          View Map
-        </Button>
+        <div ref={captureRef} data-capture-ignore className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void onCapture()}
+            disabled={isCapturing}
+            className="rounded-xl"
+          >
+            <Camera className="h-4 w-4" />
+            {isCapturing ? "Capturing..." : "Capture"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => window.open("https://gvgmapwwm.vcross.gg/", "_blank")}
+            className="rounded-xl"
+          >
+            <ExternalLink className="h-4 w-4" />
+            View Map
+          </Button>
+        </div>
       }
     >
       <div className="mb-4">

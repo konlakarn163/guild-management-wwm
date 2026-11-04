@@ -221,6 +221,7 @@ export function TeamManagementPanel() {
 
   return (
     <SectionCard
+      cat
       title="Guild War Teams"
       subtitle="Create, edit, delete teams, and choose a color for each one"
     >

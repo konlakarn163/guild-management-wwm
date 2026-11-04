@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import { PawPrint, SleepingCat } from "@/components/public/cat-decor";
 import { SectionCard } from "@/components/ui/section-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -288,6 +289,7 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
 
   return (
     <SectionCard
+      cat
       title="Guild War Registration"
       subtitle={
         selectedWindow && weekRangeLabel
@@ -309,7 +311,10 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
           </div>
         </div>
       ) : openWindows.length === 0 ? (
-        <p className="text-sm text-slate-400">Registration is currently closed. Please wait for an admin to open a window.</p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-amber-200/15 px-4 py-8 text-center">
+          <SleepingCat className="h-14 w-24 text-[#f28b3c]" />
+          <p className="text-sm text-slate-400">Registration is currently closed. Please wait for an admin to open a window.</p>
+        </div>
       ) : (
         <div className="overflow-hidden rounded-2xl bg-slate-950/30">
           <div className="overflow-x-auto rounded-t-2xl bg-slate-950 pt-2">
@@ -332,7 +337,12 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
                     onClick={() => setSelectedDayId(window.day_id)}
                   >
                     {formatDayTab(window.day_id)}
-                    {isRegistered ? " • Registered" : ""}
+                    {isRegistered ? (
+                      <span className="ml-2 inline-flex items-center gap-1 text-[#f28b3c]">
+                        <PawPrint className="h-3.5 w-3.5" />
+                        Registered
+                      </span>
+                    ) : null}
                   </Button>
                 );
               })}
@@ -356,7 +366,8 @@ export function WarRegistration({ canManageAll = false }: WarRegistrationProps) 
               <Button type="button" onClick={() => void onCancel()} variant="outline" className="rounded-xl" disabled={isSubmitting || !selectedDayId}>
                 Cancel
               </Button>
-              <span className="text-sm font-semibold text-slate-300">
+              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+                <PawPrint className={`h-4 w-4 ${isRegisteredForSelectedDay ? "text-[#f28b3c]" : "text-slate-600"}`} />
                 Status: {isRegisteredForSelectedDay ? "Registered" : "Not registered"}
               </span>
             </div>

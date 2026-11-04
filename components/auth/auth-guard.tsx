@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { CatFace } from "@/components/public/cat-decor";
 import { apiFetch } from "@/lib/api";
-import { getAccessToken, getCurrentUser, getUserRole } from "@/lib/client-auth";
+import { getAccessToken, getSessionUser, getUserRole } from "@/lib/client-auth";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase-browser";
 import type { UserRole } from "@/lib/types";
 
@@ -40,8 +41,14 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
       }
     };
 
-    const allowIfPermitted = async () => {
-      const user = await getCurrentUser();
+    let permissionCheck: Promise<void> | null = null;
+    const allowIfPermitted = () => {
+      permissionCheck ??= checkPermission();
+      return permissionCheck;
+    };
+
+    const checkPermission = async () => {
+      const user = await getSessionUser();
       if (!isActive) {
         return;
       }
@@ -64,7 +71,7 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
     };
 
     const checkAuth = async () => {
-      const user = await getCurrentUser();
+      const user = await getSessionUser();
       if (!isActive || didResolve) {
         return;
       }
@@ -91,7 +98,7 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
           return;
         }
 
-        const retryUser = await getCurrentUser();
+        const retryUser = await getSessionUser();
         if (!isActive || didResolve) {
           return;
         }
@@ -133,7 +140,12 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
   }, [allowedRoles, router]);
 
   if (state === "loading") {
-    return <p className="px-4 py-8 text-center text-slate-300">Checking permissions...</p>;
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-4 py-8 text-center text-slate-300">
+        <CatFace className="h-14 w-14 motion-safe:animate-[cat-wiggle_2.4s_ease-in-out_infinite]" />
+        <p className="text-sm font-semibold text-amber-100/80">Checking permissions… เหมียว</p>
+      </div>
+    );
   }
 
   if (state === "forbidden") {

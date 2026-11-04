@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import { ClimbingCat } from "@/components/public/climbing-cat";
 import { LanguageToggle } from "@/components/public/language-toggle";
 import { useLanguage } from "@/components/providers/language-provider";
 import { apiFetch } from "@/lib/api";
@@ -224,6 +225,7 @@ export function FloatingNavbar({ guildInfo, menuLinksToHome = false }: FloatingN
       className={`fixed inset-x-0 top-4 z-50 mx-auto w-[min(calc(100%-1.5rem),1100px)] transition-all duration-300 ${isVisible ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0 pointer-events-none"
         }`}
     >
+      <ClimbingCat className="right-[18%] md:right-[26%]" />
       <div className="flex items-center justify-between gap-3 rounded-full border border-amber-100/12 bg-[#010308]/85 px-3 py-3 shadow-[0_16px_50px_rgba(0,0,0,0.70)] backdrop-blur-xl md:px-4">
         {menuLinksToHome ? (
           <Link href="/" className="flex min-w-0 items-center gap-3 rounded-full px-2 py-1 transition hover:bg-slate-800/80">

@@ -406,7 +406,7 @@ export function WarRegistrationManager() {
 
   return (
     <>
-      <SectionCard title="War Registration Windows" subtitle="Create and manage registration windows for Guild War days">
+      <SectionCard cat title="War Registration Windows" subtitle="Create and manage registration windows for Guild War days">
         <div className="flex flex-col gap-6 lg:flex-row">
           <div className="shrink-0 rounded-xl border border-slate-700/70 bg-slate-900/60 p-4">
             <p className="mb-3 text-sm font-semibold text-slate-200">Pick a Saturday or Sunday</p>
