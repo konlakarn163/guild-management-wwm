@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Check, Copy, Pencil, Play, Plus, RotateCcw, Save, Settings2, Trash2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/client-auth";
@@ -424,7 +425,7 @@ export function CommandAnnouncementPanel() {
 
       {error ? <p className="mt-3 text-sm text-rose-300" role="alert">{error}</p> : null}
 
-      {isResetConfirmOpen ? (
+      {isResetConfirmOpen ? createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
           onMouseDown={(event) => {
@@ -468,10 +469,11 @@ export function CommandAnnouncementPanel() {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
 
-      {isConfigOpen ? (
+      {isConfigOpen ? createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-6"
           onMouseDown={(event) => {
@@ -686,7 +688,8 @@ export function CommandAnnouncementPanel() {
               </Button>
             </footer>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </SectionCard>
   );
