@@ -353,27 +353,67 @@ async function ensureReserveTeamId() {
 }
 
 const RESERVE_TEAM_NAME = "Reserve";
+const SATURDAY_WAR_END_UTC_HOUR = 15;
+
+const shiftDayId = (dayId: string, days: number) => {
+  const date = new Date(`${dayId}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
+const isSundayDayId = (dayId: string) => new Date(`${dayId}T00:00:00Z`).getUTCDay() === 0;
+
+const resolveSundaySourceDayId = (sundayId: string, now: Date) => {
+  const saturdayId = shiftDayId(sundayId, -1);
+  const saturdayWarEnd = new Date(`${saturdayId}T${String(SATURDAY_WAR_END_UTC_HOUR).padStart(2, "0")}:00:00Z`);
+  return now >= saturdayWarEnd ? saturdayId : shiftDayId(sundayId, -7);
+};
+
+async function findLatestAssignedDayId(beforeDayId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("team_members")
+    .select("day_id")
+    .lt("day_id", beforeDayId)
+    .not("registration_id", "is", null)
+    .order("day_id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new HttpError(500, error.message);
+  }
+
+  return (data?.day_id as string | undefined) ?? null;
+}
+
+async function hasAssignmentsOnDay(dayId: string) {
+  const { count, error } = await supabaseAdmin
+    .from("team_members")
+    .select("id", { count: "exact", head: true })
+    .eq("day_id", dayId)
+    .not("registration_id", "is", null);
+
+  if (error) {
+    throw new HttpError(500, error.message);
+  }
+
+  return (count ?? 0) > 0;
+}
 
 export const guildWarService = {
   async getPreviousTeamAssignments(dayId: string) {
-    const { data: latest, error: latestError } = await supabaseAdmin
-      .from("team_members")
-      .select("day_id")
-      .lt("day_id", dayId)
-      .not("registration_id", "is", null)
-      .order("day_id", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    let previousDayId: string | null;
 
-    if (latestError) {
-      throw new HttpError(500, latestError.message);
+    if (isSundayDayId(dayId)) {
+      const sourceDayId = resolveSundaySourceDayId(dayId, new Date());
+      previousDayId = (await hasAssignmentsOnDay(sourceDayId)) ? sourceDayId : null;
+    } else {
+      previousDayId = await findLatestAssignedDayId(dayId);
     }
 
-    if (!latest?.day_id) {
+    if (!previousDayId) {
       return { previousDayId: null, assignments: [] };
     }
-
-    const previousDayId = latest.day_id as string;
 
     const [membersResult, registrationsResult, reserveResult] = await Promise.all([
       supabaseAdmin
