@@ -18,9 +18,9 @@ function Button({ className, variant = "default", size = "default", ...props }: 
         "focus-visible:ring-[3px] focus-visible:ring-amber-300/25",
         variant === "default" && "bg-[#f5c548] text-slate-950 hover:bg-amber-300",
         variant === "outline" && "border border-slate-700/80 bg-slate-900/60 text-slate-100 hover:bg-slate-800/80",
-        size === "default" && "h-10 px-4 py-2",
+        size === "default" && "h-9 px-3.5 py-1.5",
         size === "sm" && "h-8 rounded-md px-3 text-xs",
-        size === "lg" && "h-11 rounded-md px-6",
+        size === "lg" && "h-10 rounded-md px-5",
         className,
       )}
       {...props}

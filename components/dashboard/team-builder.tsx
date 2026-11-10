@@ -1,7 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, ExternalLink, Send } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Camera, Clock, ExternalLink, Search, Send, Table2, Wand2, X } from "lucide-react";
+import { TimeRangeSelect } from "@/components/dashboard/time-range-select";
+import {
+  DEFAULT_AVAILABLE_FROM,
+  DEFAULT_AVAILABLE_UNTIL,
+  coversTimeRange,
+  formatTimeRange,
+  getTimelinePosition,
+  getTimelineTicks,
+  isAvailabilityExpired,
+  normalizeTime,
+} from "@/lib/war-time";
 import { toBlob } from "html-to-image";
 import { toast } from "react-toastify";
 import { Input } from "@/components/ui/input";
@@ -36,6 +48,8 @@ interface TeamMemberEntry {
   build: string;
   registrationIndex: number;
   isForce: boolean;
+  availableFrom: string;
+  availableUntil: string;
 }
 
 interface TeamState {
@@ -63,6 +77,18 @@ const getTeamType = (team?: GuildWarTeam | null): GuildWarTeamType => {
 const sortTeamsByName = (teams: TeamDefinition[]) =>
   [...teams].sort((left, right) => left.name.localeCompare(right.name));
 
+type SummaryStatusFilter = "all" | "present" | "expired";
+
+interface PreviousAssignmentsResponse {
+  previousDayId: string | null;
+  assignments: Array<{
+    teamId: string;
+    userId: string | null;
+    characterName: string | null;
+    isForce: boolean;
+  }>;
+}
+
 interface TeamBuilderProps {
   canDrag?: boolean;
 }
@@ -86,6 +112,7 @@ interface DraggableMemberProps {
   getBuildColor: (build: string) => string;
   displayIndex?: number;
   itemClassName?: string;
+  isInactive?: boolean;
 }
 
 function DraggableMember({
@@ -97,37 +124,49 @@ function DraggableMember({
   getBuildColor,
   displayIndex,
   itemClassName,
+  isInactive,
 }: DraggableMemberProps) {
   const moveTargets = zones.filter((zone) => zone !== currentZone);
 
+  const buildColor = getBuildColor(member.build);
+
   const content = (
-    <div className="flex items-center justify-between gap-2">
-      <span>
-        {displayIndex ? `${displayIndex}. ` : ""}
-        {member.characterName}
-      </span>
-      <span
-        className="inline-flex items-center gap-1 text-xs"
-        style={{ color: getBuildColor(member.build) }}
-      >
-        <span
-          className="h-2 w-2 rounded-full"
-          style={{ backgroundColor: getBuildColor(member.build) }}
-        />
-        {member.build}
-      </span>
-      {member.isForce ? (
-        <span className="rounded-full border border-amber-400/50 px-1.5 py-0.5 text-[10px] text-amber-200">
-          FORCE
+    <div className={`flex items-center gap-3 ${isInactive ? "opacity-45" : ""}`}>
+      {displayIndex ? (
+        <span className="w-5 shrink-0 text-right text-xs font-medium tabular-nums text-slate-500">
+          {displayIndex}
         </span>
       ) : null}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-semibold text-slate-100">{member.characterName}</span>
+          {member.isForce ? (
+            <span className="shrink-0 rounded border border-amber-400/40 px-1 text-[9px] font-semibold leading-4 text-amber-200">
+              FORCE
+            </span>
+          ) : null}
+        </span>
+        <span
+          className={`inline-flex items-center gap-1 text-[11px] ${isInactive ? "text-rose-300 line-through" : "text-slate-500"}`}
+        >
+          <Clock className="h-3 w-3" />
+          {formatTimeRange(member.availableFrom, member.availableUntil)}
+        </span>
+      </span>
+      <span
+        className="inline-flex max-w-[45%] shrink-0 items-center gap-1 truncate rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+        style={{ color: buildColor, borderColor: `${buildColor}55`, backgroundColor: `${buildColor}14` }}
+      >
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: buildColor }} />
+        <span className="truncate">{member.build}</span>
+      </span>
     </div>
   );
 
   if (!canManage) {
     return (
       <div
-        className={`cursor-default rounded-2xl border px-3 py-2 text-sm font-semibold shadow-[0_8px_18px_rgba(2,6,23,0.35)] opacity-90 ${itemClassName ?? "border-slate-600 bg-slate-900 text-slate-100"}`}
+        className={`cursor-default rounded-lg border px-3 py-2 ${itemClassName ?? "border-slate-700/80 bg-slate-900/80"}`}
       >
         {content}
       </div>
@@ -138,7 +177,7 @@ function DraggableMember({
     <Popover>
       <PopoverTrigger asChild>
         <div
-          className={`rounded-2xl border px-3 py-2 text-sm font-semibold shadow-[0_8px_18px_rgba(2,6,23,0.35)] ${itemClassName ?? "border-slate-600 bg-slate-900 text-slate-100"}`}
+          className={`cursor-pointer rounded-lg border px-3 py-2 transition hover:border-amber-300/40 hover:bg-slate-800/80 ${itemClassName ?? "border-slate-700/80 bg-slate-900/80"}`}
         >
           {content}
         </div>
@@ -180,6 +219,7 @@ function DropZone({
   getBuildColor,
   membersGridClassName,
   itemClassName,
+  isMemberInactive,
 }: {
   id: string;
   label: string;
@@ -193,6 +233,7 @@ function DropZone({
   getBuildColor: (build: string) => string;
   membersGridClassName?: string;
   itemClassName?: string;
+  isMemberInactive?: (member: TeamMemberEntry) => boolean;
 }) {
   const zoneStyle = accentColor
     ? {
@@ -203,28 +244,31 @@ function DropZone({
 
   return (
     <div
-      className="rounded-md border border-slate-700 bg-slate-950/70 p-4 transition"
+      className="rounded-xl border border-slate-700/70 bg-slate-950/60 p-4 transition"
       style={zoneStyle}
     >
-      <h4 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-amber-100">
-        {accentColor ? (
-          <span
-            className="h-3 w-3 rounded-full"
-            style={{ backgroundColor: accentColor }}
-          />
-        ) : null}
-        <span>
-          {label} ({totalCount ?? members.length})
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+            {accentColor ? (
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: accentColor }}
+              />
+            ) : null}
+            <span className="truncate">{label}</span>
+          </h4>
+          {description ? (
+            <p className="mt-0.5 text-xs text-slate-400">{description}</p>
+          ) : null}
+        </div>
+        <span className="shrink-0 rounded-full bg-slate-800/90 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-300">
+          {totalCount ?? members.length}
         </span>
-      </h4>
-      {description ? (
-        <p className="mb-3 text-xs leading-5 text-slate-300/80">
-          {description}
-        </p>
-      ) : null}
-      <div className={membersGridClassName ?? "grid gap-2"}>
-        {members.length > 0 ? (
-          members.map((member, index) => (
+      </div>
+      {members.length > 0 ? (
+        <div className={membersGridClassName ?? "grid gap-2"}>
+          {members.map((member, index) => (
             <DraggableMember
               key={member.key}
               member={member}
@@ -235,29 +279,30 @@ function DropZone({
               getBuildColor={getBuildColor}
               displayIndex={id === "pool" ? index + 1 : undefined}
               itemClassName={itemClassName}
+              isInactive={isMemberInactive?.(member)}
             />
-          ))
-        ) : (
-          <p className="flex items-center gap-3 rounded-xl border border-dashed border-slate-700 px-3 py-3 text-xs text-slate-400">
-            <SleepingCat className="h-7 w-11 shrink-0 text-amber-200/70" />
-            No matching members
-          </p>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <p className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-slate-700/80 px-3 py-4 text-xs text-slate-500">
+          <SleepingCat className="h-5 w-8 shrink-0 text-amber-200/50" />
+          ยังไม่มีสมาชิก
+        </p>
+      )}
     </div>
   );
 }
 
 function TeamBuilderSkeleton() {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3">
       <div className="rounded-md border border-slate-700 bg-slate-950/70 p-4">
         <Skeleton className="mb-3 h-4 w-28" />
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <Skeleton
               key={`pool-skeleton-${index}`}
-              className="h-12 w-full rounded-2xl"
+              className="h-10 w-full rounded-lg"
             />
           ))}
         </div>
@@ -274,7 +319,7 @@ function TeamBuilderSkeleton() {
               {Array.from({ length: 4 }).map((__, cardIndex) => (
                 <Skeleton
                   key={`team-member-skeleton-${zoneIndex}-${cardIndex}`}
-                  className="h-12 w-full rounded-2xl"
+                  className="h-10 w-full rounded-lg"
                 />
               ))}
             </div>
@@ -290,6 +335,15 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
   const [teamIdByName, setTeamIdByName] = useState<Record<string, string>>({});
   const [teamDefinitions, setTeamDefinitions] = useState<TeamDefinition[]>([]);
   const [search, setSearch] = useState("");
+  const [now, setNow] = useState(() => new Date());
+  const [hideExpired, setHideExpired] = useState(true);
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [summaryRangeFrom, setSummaryRangeFrom] = useState("");
+  const [summaryRangeTo, setSummaryRangeTo] = useState("");
+  const [summaryStatus, setSummaryStatus] = useState<SummaryStatusFilter>("all");
+  const [isAutoAssigning, setIsAutoAssigning] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isSendingCapture, setIsSendingCapture] = useState(false);
   const captureRef = useRef<HTMLDivElement>(null);
@@ -353,10 +407,6 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     );
   };
 
-  const selectedWindow = useMemo(
-    () => openWindows.find((window) => window.day_id === selectedDayId) ?? null,
-    [openWindows, selectedDayId],
-  );
 
   const computeMovedState = (
     prev: TeamState,
@@ -505,6 +555,8 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
             build,
             registrationIndex: uniqueMembers.length + 1,
             isForce,
+            availableFrom: normalizeTime(item.available_from, DEFAULT_AVAILABLE_FROM),
+            availableUntil: normalizeTime(item.available_until, DEFAULT_AVAILABLE_UNTIL),
           };
           uniqueMembers.push(entry);
           memberByKey.set(key, entry);
@@ -628,17 +680,134 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
     };
   }, [refreshPoolFromRegistrants, selectedDayId]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const isMemberExpired = useCallback(
+    (member: TeamMemberEntry) =>
+      Boolean(selectedDayId) &&
+      isAvailabilityExpired(selectedDayId, member.availableUntil, now),
+    [now, selectedDayId],
+  );
+
+  const isRangeFilterActive = Boolean(rangeFrom && rangeTo);
+
+  const isMemberInactive = useCallback(
+    (member: TeamMemberEntry) => {
+      if (hideExpired && isMemberExpired(member)) {
+        return true;
+      }
+
+      if (
+        isRangeFilterActive &&
+        !coversTimeRange(member.availableFrom, member.availableUntil, rangeFrom, rangeTo)
+      ) {
+        return true;
+      }
+
+      return false;
+    },
+    [hideExpired, isMemberExpired, isRangeFilterActive, rangeFrom, rangeTo],
+  );
+
+  const hiddenPoolCount = useMemo(
+    () => state.pool.filter(isMemberInactive).length,
+    [isMemberInactive, state.pool],
+  );
+
   const filteredPool = useMemo(
     () =>
       sortByRegistrationOrder(
         state.pool.filter((member) => {
+          if (isMemberInactive(member)) {
+            return false;
+          }
           const haystack =
             `${member.characterName} ${member.build}`.toLowerCase();
           return haystack.includes(normalizedSearch);
         }),
       ),
-    [normalizedSearch, state.pool],
+    [isMemberInactive, normalizedSearch, state.pool],
   );
+
+  const zoneByMemberKey = useMemo(() => {
+    const mapping = new Map<string, string>();
+    for (const member of state.pool) {
+      mapping.set(member.key, "Pool");
+    }
+    for (const [teamName, members] of Object.entries(state.teams)) {
+      for (const member of members) {
+        mapping.set(member.key, teamName);
+      }
+    }
+    return mapping;
+  }, [state.pool, state.teams]);
+
+  const summaryBaseRows = useMemo(() => {
+    const all = [
+      ...state.pool,
+      ...Object.values(state.teams).flat(),
+    ];
+    const unique = [...new Map(all.map((member) => [member.key, member])).values()];
+    const isSummaryRangeActive = Boolean(summaryRangeFrom && summaryRangeTo);
+
+    return unique
+      .filter(
+        (member) =>
+          !isSummaryRangeActive ||
+          coversTimeRange(
+            member.availableFrom,
+            member.availableUntil,
+            summaryRangeFrom,
+            summaryRangeTo,
+          ),
+      )
+      .sort(
+        (left, right) =>
+          left.availableFrom.localeCompare(right.availableFrom) ||
+          left.availableUntil.localeCompare(right.availableUntil) ||
+          left.registrationIndex - right.registrationIndex,
+      );
+  }, [state.pool, state.teams, summaryRangeFrom, summaryRangeTo]);
+
+  const summaryExpiredCount = useMemo(
+    () => summaryBaseRows.filter(isMemberExpired).length,
+    [isMemberExpired, summaryBaseRows],
+  );
+
+  const summaryRows = useMemo(() => {
+    if (summaryStatus === "all") {
+      return summaryBaseRows;
+    }
+
+    const wantExpired = summaryStatus === "expired";
+    return summaryBaseRows.filter((member) => isMemberExpired(member) === wantExpired);
+  }, [isMemberExpired, summaryBaseRows, summaryStatus]);
+
+  const summaryStatusOptions: Array<{ value: SummaryStatusFilter; label: string; count: number; activeClassName: string }> = [
+    {
+      value: "all",
+      label: "ทั้งหมด",
+      count: summaryBaseRows.length,
+      activeClassName: "border-amber-300/50 bg-amber-400/15 text-amber-100",
+    },
+    {
+      value: "present",
+      label: "อยู่",
+      count: summaryBaseRows.length - summaryExpiredCount,
+      activeClassName: "border-emerald-400/50 bg-emerald-950/50 text-emerald-100",
+    },
+    {
+      value: "expired",
+      label: "ไม่อยู่",
+      count: summaryExpiredCount,
+      activeClassName: "border-rose-400/50 bg-rose-950/50 text-rose-100",
+    },
+  ];
+
+  const timelineTicks = useMemo(() => getTimelineTicks(), []);
 
   const filteredTeams = useMemo(
     () =>
@@ -695,6 +864,86 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
         memberKey,
         targetZone,
       });
+    }
+  };
+
+  const onAutoAssign = async () => {
+    if (!selectedDayId) {
+      return;
+    }
+
+    setIsAutoAssigning(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        toast.error("Please login first");
+        return;
+      }
+
+      const result = await apiFetch<PreviousAssignmentsResponse>(
+        `/api/guild-war/teams/previous-assignments?dayId=${encodeURIComponent(selectedDayId)}`,
+        { token },
+      );
+
+      if (!result.previousDayId || result.assignments.length === 0) {
+        toast.info("ไม่พบการจัดทีมรอบก่อนหน้า");
+        return;
+      }
+
+      const teamNameById = new Map(teamDefinitions.map((team) => [team.id, team.name]));
+      const teamByUserId = new Map<string, string>();
+      const teamByName = new Map<string, string>();
+
+      for (const assignment of result.assignments) {
+        const teamName = teamNameById.get(assignment.teamId);
+        if (!teamName) {
+          continue;
+        }
+        if (assignment.userId) {
+          teamByUserId.set(assignment.userId, teamName);
+        } else if (assignment.characterName) {
+          teamByName.set(assignment.characterName.trim().toLowerCase(), teamName);
+        }
+      }
+
+      const moves = state.pool
+        .map((member) => {
+          const teamName = member.userId
+            ? teamByUserId.get(member.userId)
+            : teamByName.get(member.characterName.trim().toLowerCase());
+          return teamName ? { memberKey: member.key, teamName } : null;
+        })
+        .filter((move): move is { memberKey: string; teamName: string } => Boolean(move));
+
+      if (moves.length === 0) {
+        toast.info(`ไม่มีคนใน Pool ที่ซ้ำกับรอบ ${formatDayTab(result.previousDayId)}`);
+        return;
+      }
+
+      const next = moves.reduce(
+        (current, move) => computeMovedState(current, move.memberKey, move.teamName),
+        state,
+      );
+      setState(next);
+      enqueuePersistTeams(next, [...new Set(moves.map((move) => move.teamName))]);
+
+      const socket = getRealtimeSocket();
+      if (latestWeekIdRef.current) {
+        for (const move of moves) {
+          socket.emit("guildWar:teamMoved", {
+            weekId: latestWeekIdRef.current,
+            dayId: selectedDayId,
+            memberKey: move.memberKey,
+            targetZone: move.teamName,
+          });
+        }
+      }
+
+      toast.success(`จัด ${moves.length} คนลงทีมเดิมจากรอบ ${formatDayTab(result.previousDayId)}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Auto จัดทีมไม่สำเร็จ");
+    } finally {
+      setIsAutoAssigning(false);
     }
   };
 
@@ -793,218 +1042,445 @@ export function TeamBuilder({ canDrag = false }: TeamBuilderProps) {
           : "Read-only mode. Only ADMIN/SUPER_ADMIN can move and arrange teams."
       }
       action={
-        <div ref={captureRef} data-capture-ignore className="flex flex-wrap items-center justify-end gap-2">
+        <div ref={captureRef} data-capture-ignore className="flex flex-wrap items-center gap-1.5">
           <Button
             type="button"
             variant="outline"
+            size="sm"
             onClick={() => void onCapture()}
             disabled={isCapturing}
-            className="rounded-xl"
+            className="rounded-lg"
           >
-            <Camera className="h-4 w-4" />
+            <Camera className="h-3.5 w-3.5" />
             {isCapturing ? "Capturing..." : "Capture"}
           </Button>
           {canDrag ? (
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => void onCaptureAndSend()}
               disabled={isSendingCapture}
-              className="rounded-xl"
+              className="rounded-lg"
             >
-              <Send className="h-4 w-4" />
-              {isSendingCapture ? "Sending..." : "Capture & Send to Discord"}
+              <Send className="h-3.5 w-3.5" />
+              {isSendingCapture ? "Sending..." : "ส่ง Discord"}
             </Button>
           ) : null}
           <Button
             type="button"
             variant="outline"
+            size="sm"
             onClick={() => window.open("https://gvgmapwwm.vcross.gg/", "_blank")}
-            className="rounded-xl"
+            className="rounded-lg"
           >
-            <ExternalLink className="h-4 w-4" />
-            View Map
+            <ExternalLink className="h-3.5 w-3.5" />
+            Map
           </Button>
         </div>
       }
     >
-      <div className="mb-4">
-        <div className="overflow-x-auto rounded-t-2xl bg-slate-950/40  pt-2">
-          <div className="flex min-w-max items-end gap-1 border-b border-slate-700/70">
-            {openWindows.map((window) => {
-              const isActive = selectedDayId === window.day_id;
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {openWindows.length > 0 ? (
+            <div
+              role="tablist"
+              aria-label="วันวอ"
+              className="inline-flex rounded-lg border border-slate-700/70 bg-slate-900/70 p-1"
+            >
+              {openWindows.map((window) => {
+                const isActive = selectedDayId === window.day_id;
 
-              return (
-                <Button
-                  key={window.id}
-                  type="button"
-                  variant={isActive ? "default" : "outline"}
-                  className={[
-                    "-mb-px h-10 rounded-b-none rounded-t-xl border px-4 text-sm font-semibold transition-all",
-                    isActive
-                      ? "border-slate-600 border-b-slate-950 bg-slate-950 text-amber-100 hover:bg-slate-950"
-                      : "border-transparent bg-slate-900/70 text-slate-400 hover:bg-slate-900 hover:text-slate-100",
-                  ].join(" ")}
-                  onClick={() => setSelectedDayId(window.day_id)}
-                >
-                  {formatDayTab(window.day_id)}
-                </Button>
-              );
-            })}
-          </div>
-          {openWindows.length === 0 && !isLoadingPool ? (
-            <p className="px-2 py-3 text-sm text-slate-400">
-              No open registration day
-            </p>
+                return (
+                  <button
+                    key={window.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setSelectedDayId(window.day_id)}
+                    className={`h-8 rounded-md px-4 text-sm font-semibold transition ${
+                      isActive
+                        ? "bg-[#f5c548] text-slate-950"
+                        : "text-slate-400 hover:text-slate-100"
+                    }`}
+                  >
+                    {formatDayTab(window.day_id)}
+                  </button>
+                );
+              })}
+            </div>
+          ) : !isLoadingPool ? (
+            <p className="text-sm text-slate-400">No open registration day</p>
+          ) : (
+            <Skeleton className="h-10 w-48 rounded-lg" />
+          )}
+
+          {!isLoadingPool && openWindows.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="rounded-full border border-rose-500/30 bg-rose-950/30 px-2.5 py-1 text-rose-100">
+                ATK <span className="font-semibold tabular-nums">{attackRegisteredCount}</span>
+              </span>
+              <span className="rounded-full border border-cyan-500/30 bg-cyan-950/30 px-2.5 py-1 text-cyan-100">
+                DEF <span className="font-semibold tabular-nums">{defenseRegisteredCount}</span>
+              </span>
+              <span className="rounded-full border border-amber-500/30 bg-amber-950/30 px-2.5 py-1 text-amber-100">
+                รวม <span className="font-semibold tabular-nums">{attackDefenseRegisteredCount}</span>
+              </span>
+            </div>
           ) : null}
         </div>
 
-        <div className="overflow-hidden rounded-b-2xl rounded-tr-2xl border border-t-0 border-slate-700/50 bg-slate-950/30 p-4">
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search member name..."
-            className="h-10 rounded-xl"
-          />
-          {isLoadingPool ? <Skeleton className="mt-2 h-3 w-52" /> : null}
+        <div
+          data-capture-ignore
+          className="flex flex-col gap-3 rounded-xl border border-slate-700/60 bg-slate-900/40 p-3 lg:flex-row lg:items-center"
+        >
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="ค้นหาชื่อหรือ build..."
+              className="rounded-lg pl-9"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <TimeRangeSelect
+              from={rangeFrom}
+              until={rangeTo}
+              onChange={(from, until) => {
+                setRangeFrom(from);
+                setRangeTo(until);
+              }}
+            />
+            {rangeFrom || rangeTo ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setRangeFrom("");
+                  setRangeTo("");
+                }}
+                aria-label="ล้างช่วงเวลา"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setHideExpired((prev) => !prev)}
+              aria-pressed={hideExpired}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition ${
+                hideExpired
+                  ? "border-amber-300/50 bg-amber-400/15 text-amber-100"
+                  : "border-slate-700 bg-slate-900/70 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Clock className="h-3.5 w-3.5" />
+              {hideExpired ? "ซ่อนนุดที่ไม่อยู่แล้ว" : "แสดงนุดทั้งหมด"}
+            </button>
+            <span aria-hidden="true" className="mx-1 hidden h-6 w-px bg-slate-700 lg:block" />
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-lg"
+              onClick={() => setIsSummaryOpen(true)}
+              disabled={!selectedDayId}
+            >
+              <Table2 className="h-4 w-4" />
+              ตารางเวลา
+            </Button>
+            {canDrag ? (
+              <Button
+                type="button"
+                className="rounded-lg"
+                onClick={() => void onAutoAssign()}
+                disabled={!selectedDayId || isAutoAssigning || isLoadingPool || state.pool.length === 0}
+                title="จัดคนใน Pool ที่เคยลงรอบล่าสุดเข้าทีมเดิม"
+              >
+                <Wand2 className="h-4 w-4" />
+                {isAutoAssigning ? "กำลังจัด..." : "Auto"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
 
-          {!isLoadingPool ? (
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-3 py-2 text-sm text-rose-100">
-                <span className="font-semibold">ATK:</span>{" "}
-                {attackRegisteredCount}
-              </div>
-              <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-100">
-                <span className="font-semibold">DEF:</span>{" "}
-                {defenseRegisteredCount}
-              </div>
-              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-100">
-                <span className="font-semibold">ATK + DEF:</span>{" "}
-                {attackDefenseRegisteredCount}
-              </div>
+        {isLoadingPool ? (
+          <TeamBuilderSkeleton />
+        ) : (
+          <div className="space-y-6">
+            <DropZone
+              id="pool"
+              label="Pool"
+              description={
+                hiddenPoolCount > 0
+                  ? `ซ่อนอยู่ ${hiddenPoolCount} คน (หมดเวลาหรืออยู่นอกช่วงเวลาที่เลือก)`
+                  : "คนที่ลงทะเบียนแล้วแต่ยังไม่มีทีม"
+              }
+              members={filteredPool}
+              totalCount={filteredPool.length}
+              canManage={canDrag}
+              zones={zones}
+              onMove={moveMember}
+              getBuildColor={getBuildColor}
+              membersGridClassName="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            />
+
+            <div className="grid items-start gap-6 xl:grid-cols-2">
+              {[
+                { key: "atk", label: "ATK", teams: attackTeams, count: attackRegisteredCount, tone: "text-rose-200", bar: "bg-rose-400" },
+                { key: "def", label: "DEF", teams: defenseTeams, count: defenseRegisteredCount, tone: "text-cyan-200", bar: "bg-cyan-400" },
+              ].map((group) => (
+                <div key={group.key} className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                    <p className={`flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] ${group.tone}`}>
+                      <span className={`h-4 w-1 rounded-full ${group.bar}`} />
+                      {group.label}
+                    </p>
+                    <span className="text-xs text-slate-400">
+                      {group.teams.length} ทีม • {group.count} คน
+                    </span>
+                  </div>
+                  {group.teams.length > 0 ? (
+                    group.teams.map((team) => (
+                      <DropZone
+                        key={team.name}
+                        id={team.name}
+                        label={team.name}
+                        description={team.description}
+                        accentColor={team.color}
+                        members={filteredTeams[team.name] ?? []}
+                        totalCount={(filteredTeams[team.name] ?? []).length}
+                        canManage={canDrag}
+                        zones={zones}
+                        onMove={moveMember}
+                        getBuildColor={getBuildColor}
+                        membersGridClassName="grid gap-2 sm:grid-cols-2"
+                        isMemberInactive={isMemberInactive}
+                      />
+                    ))
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-slate-700/80 px-4 py-6 text-center text-xs text-slate-500">
+                      ยังไม่มีทีม {group.label}
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
-          ) : null}
 
-          <div className="mt-4">
-            {isLoadingPool ? (
-              <TeamBuilderSkeleton />
-            ) : (
-              <div className="grid gap-4">
-                <DropZone
-                  id="pool"
-                  label={
-                    selectedWindow
-                      ? `Pool (${formatDayTab(selectedWindow.day_id)})`
-                      : "Pool"
-                  }
-                  members={filteredPool}
-                  totalCount={filteredPool.length}
-                  canManage={canDrag}
-                  zones={zones}
-                  onMove={moveMember}
-                  getBuildColor={getBuildColor}
-                  membersGridClassName="grid gap-2 md:grid-cols-2 xl:grid-cols-3"
-                  itemClassName="border-slate-600 bg-slate-900 text-slate-100"
-                />
-                <div className="grid items-start gap-4 xl:grid-cols-2">
-                  <div className="grid content-start gap-3 self-start">
-                    <div className="rounded-md border border-rose-500/25 bg-rose-950/10 px-4 py-3 max-h-12">
-                      <p className="text-sm font-bold uppercase tracking-[0.2em] text-rose-200">
-                        ATK
-                      </p>
-                    </div>
-                    {attackTeams.length > 0 ? (
-                      attackTeams.map((team) => (
-                        <DropZone
-                          key={team.name}
-                          id={team.name}
-                          label={team.name}
-                          description={team.description}
-                          accentColor={team.color}
-                          members={filteredTeams[team.name] ?? []}
-                          totalCount={(filteredTeams[team.name] ?? []).length}
-                          canManage={canDrag}
-                          zones={zones}
-                          onMove={moveMember}
-                          getBuildColor={getBuildColor}
-                          membersGridClassName="grid gap-2 sm:grid-cols-2"
-                          itemClassName="border-slate-600 bg-slate-900 text-slate-100"
-                        />
-                      ))
-                    ) : (
-                      <p className="rounded-md border border-dashed border-rose-400/30 px-4 py-5 text-sm text-rose-100/70">
-                        No ATK teams
-                      </p>
-                    )}
+            {otherTeams.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                  <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-amber-200">
+                    <span className="h-4 w-1 rounded-full bg-amber-400" />
+                    Other
+                  </p>
+                  <span className="text-xs text-slate-400">{otherTeams.length} ทีม</span>
+                </div>
+                <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {otherTeams.map((team) => (
+                    <DropZone
+                      key={team.name}
+                      id={team.name}
+                      label={team.name}
+                      description={team.description}
+                      accentColor={team.color}
+                      members={filteredTeams[team.name] ?? []}
+                      totalCount={(filteredTeams[team.name] ?? []).length}
+                      canManage={canDrag}
+                      zones={zones}
+                      onMove={moveMember}
+                      getBuildColor={getBuildColor}
+                      membersGridClassName="grid gap-2"
+                      isMemberInactive={isMemberInactive}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      {isSummaryOpen
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) setIsSummaryOpen(false);
+              }}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="war-time-summary-title"
+                className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-md border border-amber-300/20 bg-[#07101c] shadow-2xl"
+              >
+                <div className="border-b border-slate-700/70 p-4">
+                  <div className="flex items-center gap-3">
+                    <h3 id="war-time-summary-title" className="text-lg font-semibold text-white">
+                      ตารางสรุปเวลา
+                      {selectedDayId ? ` • ${formatDayTab(selectedDayId)}` : ""}
+                    </h3>
+                    <span className="rounded-full border border-slate-700 bg-slate-900/70 px-2 py-0.5 text-xs font-semibold text-slate-300">
+                      {summaryRows.length} คน
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsSummaryOpen(false)}
+                      className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                      aria-label="Close"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
                   </div>
 
-                  <div className="grid content-start gap-3 self-start">
-                    <div className="rounded-md border border-cyan-500/25 bg-cyan-950/10 px-4 py-3 max-h-12">
-                      <p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-200">
-                        DEF
-                      </p>
+                  <div className="mt-4 flex flex-col gap-3 rounded-xl border border-slate-700/70 bg-slate-900/40 p-2 md:flex-row md:items-center md:justify-between">
+                    <div
+                      role="radiogroup"
+                      aria-label="สถานะ"
+                      className="grid grid-cols-3 gap-1 rounded-lg bg-slate-950/60 p-1"
+                    >
+                      {summaryStatusOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={summaryStatus === option.value}
+                          onClick={() => setSummaryStatus(option.value)}
+                          className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-md border px-3 text-sm font-semibold transition ${
+                            summaryStatus === option.value
+                              ? option.activeClassName
+                              : "border-transparent text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          {option.label}
+                          <span className="rounded-full bg-black/30 px-1.5 text-xs tabular-nums">{option.count}</span>
+                        </button>
+                      ))}
                     </div>
-                    {defenseTeams.length > 0 ? (
-                      defenseTeams.map((team) => (
-                        <DropZone
-                          key={team.name}
-                          id={team.name}
-                          label={team.name}
-                          description={team.description}
-                          accentColor={team.color}
-                          members={filteredTeams[team.name] ?? []}
-                          totalCount={(filteredTeams[team.name] ?? []).length}
-                          canManage={canDrag}
-                          zones={zones}
-                          onMove={moveMember}
-                          getBuildColor={getBuildColor}
-                          membersGridClassName="grid gap-2 sm:grid-cols-2"
-                          itemClassName="border-slate-600 bg-slate-900 text-slate-100"
-                        />
-                      ))
-                    ) : (
-                      <p className="rounded-md border border-dashed border-cyan-400/30 px-4 py-5 text-sm text-cyan-100/70">
-                        No DEF teams
-                      </p>
-                    )}
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-sm text-slate-400">
+                        <Clock className="h-4 w-4" />
+                        อยู่ตลอดช่วง
+                      </span>
+                      <TimeRangeSelect
+                        from={summaryRangeFrom}
+                        until={summaryRangeTo}
+                        onChange={(from, until) => {
+                          setSummaryRangeFrom(from);
+                          setSummaryRangeTo(until);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSummaryRangeFrom("");
+                          setSummaryRangeTo("");
+                        }}
+                        disabled={!summaryRangeFrom && !summaryRangeTo}
+                        aria-label="ล้างช่วงเวลา"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {otherTeams.length > 0 ? (
-                  <div className="grid gap-3">
-                    <div className="rounded-md border border-amber-500/25 bg-amber-950/10 px-4 py-3">
-                      <p className="text-sm font-bold uppercase tracking-[0.2em] text-amber-200">
-                        OTHER
-                      </p>
-                    </div>
-                    <div
-                      className={`grid gap-3 ${otherTeams.length === 1 ? "grid-cols-1" : "md:grid-cols-2 xl:grid-cols-3"}`}
-                    >
-                      {otherTeams.map((team) => (
-                        <DropZone
-                          key={team.name}
-                          id={team.name}
-                          label={team.name}
-                          description={team.description}
-                          accentColor={team.color}
-                          members={filteredTeams[team.name] ?? []}
-                          totalCount={(filteredTeams[team.name] ?? []).length}
-                          canManage={canDrag}
-                          zones={zones}
-                          onMove={moveMember}
-                          getBuildColor={getBuildColor}
-                          membersGridClassName="grid gap-2"
-                          itemClassName="border-slate-600 bg-slate-900 text-slate-100"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+                <div className="overflow-auto p-4">
+                  <table className="w-full min-w-[640px] border-collapse text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
+                        <th className="w-10 px-2 py-1.5">#</th>
+                        <th className="px-2 py-1.5">ชื่อ</th>
+                        <th className="px-2 py-1.5">เวลา</th>
+                        <th className="w-[40%] px-2 py-1.5">
+                          <div className="relative h-4">
+                            {timelineTicks.map((tick, tickIndex) => (
+                              <span
+                                key={tick}
+                                className={`absolute text-[10px] font-medium normal-case tracking-normal ${
+                                  tickIndex === 0
+                                    ? ""
+                                    : tickIndex === timelineTicks.length - 1
+                                      ? "-translate-x-full"
+                                      : "-translate-x-1/2"
+                                }`}
+                                style={{ left: `${getTimelinePosition(tick, tick).left}%` }}
+                              >
+                                {tick}
+                              </span>
+                            ))}
+                          </div>
+                        </th>
+                        <th className="px-2 py-1.5">ทีม</th>
+                        <th className="px-2 py-1.5">สถานะ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summaryRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-2 py-6 text-center text-slate-400">
+                            ไม่มีคนในช่วงเวลานี้
+                          </td>
+                        </tr>
+                      ) : (
+                        summaryRows.map((member, index) => {
+                          const expired = isMemberExpired(member);
+                          const bar = getTimelinePosition(member.availableFrom, member.availableUntil);
+
+                          return (
+                            <tr key={member.key} className="border-t border-slate-800/80">
+                              <td className="px-2 py-1.5 text-slate-500">{index + 1}</td>
+                              <td className="px-2 py-1.5">
+                                <div className="font-semibold text-slate-100">{member.characterName}</div>
+                                <div className="text-xs" style={{ color: getBuildColor(member.build) }}>
+                                  {member.build}
+                                </div>
+                              </td>
+                              <td className="whitespace-nowrap px-2 py-1.5 font-mono text-slate-200">
+                                {formatTimeRange(member.availableFrom, member.availableUntil)}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <div className="relative h-3 rounded-full bg-slate-800/80">
+                                  {timelineTicks.map((tick) => (
+                                    <span
+                                      key={tick}
+                                      className="absolute top-0 h-full w-px bg-slate-700/70"
+                                      style={{ left: `${getTimelinePosition(tick, tick).left}%` }}
+                                    />
+                                  ))}
+                                  <span
+                                    className={`absolute top-0 h-full rounded-full ${expired ? "bg-slate-500/60" : "bg-amber-400/80"}`}
+                                    style={{ left: `${bar.left}%`, width: `${bar.width}%` }}
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-2 py-1.5 text-slate-300">{zoneByMemberKey.get(member.key) ?? "-"}</td>
+                              <td className="px-2 py-1.5">
+                                {expired ? (
+                                  <span className="rounded-full border border-rose-400/40 bg-rose-950/40 px-2 py-0.5 text-xs text-rose-200">
+                                    หมดเวลา
+                                  </span>
+                                ) : (
+                                  <span className="rounded-full border border-emerald-400/40 bg-emerald-950/40 px-2 py-0.5 text-xs text-emerald-200">
+                                    อยู่
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </SectionCard>
   );
 }

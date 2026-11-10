@@ -11,14 +11,38 @@ const weekSchema = z.object({
   weekId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+const availabilityFields = {
+  availableFrom: timeSchema.optional(),
+  availableUntil: timeSchema.optional(),
+};
+
 const dayPayloadSchema = z.object({
   dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+const registerPayloadSchema = z.object({
+  dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ...availabilityFields,
+});
+
+const availabilityPayloadSchema = z.object({
+  dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  availableFrom: timeSchema,
+  availableUntil: timeSchema,
 });
 
 const adminRegisterSchema = z.object({
   userId: z.string().uuid(),
   dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ...availabilityFields,
 });
+
+const toAvailability = (payload: { availableFrom?: string; availableUntil?: string }) =>
+  payload.availableFrom && payload.availableUntil
+    ? { availableFrom: payload.availableFrom, availableUntil: payload.availableUntil }
+    : undefined;
 
 const createWindowSchema = z.object({
   dayId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -66,6 +90,13 @@ export const guildWarController = {
       window: firstWindow,
       registrations: firstWindow ? payload.registrationsByDay[firstWindow.day_id] ?? [] : [],
     });
+  }),
+
+  getPreviousTeamAssignments: asyncHandler(async (req: Request, res: Response) => {
+    assertAdmin(req);
+    const { dayId } = dayPayloadSchema.parse(req.query);
+    const result = await guildWarService.getPreviousTeamAssignments(dayId);
+    res.json(result);
   }),
 
   listWindows: asyncHandler(async (req: Request, res: Response) => {
@@ -145,8 +176,9 @@ export const guildWarController = {
       throw new HttpError(401, "Unauthorized");
     }
 
-    const { dayId } = dayPayloadSchema.parse(req.body);
-    const registration = await guildWarService.registerByDay(req.authUser.id, dayId);
+    const payload = registerPayloadSchema.parse(req.body);
+    const { dayId } = payload;
+    const registration = await guildWarService.registerByDay(req.authUser.id, dayId, toAvailability(payload));
 
     getSocketServer().to(`guildWar:week:${registration.week_id}`).emit("guildWar:registrationsUpdated", {
       weekId: registration.week_id,
@@ -158,13 +190,35 @@ export const guildWarController = {
     res.status(201).json(registration);
   }),
 
+  updateAvailability: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.authUser) {
+      throw new HttpError(401, "Unauthorized");
+    }
+
+    const payload = availabilityPayloadSchema.parse(req.body);
+    const registration = await guildWarService.updateAvailabilityByDay(req.authUser.id, payload.dayId, {
+      availableFrom: payload.availableFrom,
+      availableUntil: payload.availableUntil,
+    });
+
+    getSocketServer().to(`guildWar:week:${registration.week_id}`).emit("guildWar:registrationsUpdated", {
+      weekId: registration.week_id,
+      dayId: payload.dayId,
+      action: "update-availability",
+      userId: req.authUser.id,
+    });
+
+    res.json(registration);
+  }),
+
   registerToReserve: asyncHandler(async (req: Request, res: Response) => {
     if (!req.authUser) {
       throw new HttpError(401, "Unauthorized");
     }
 
-    const { dayId } = dayPayloadSchema.parse(req.body);
-    const registration = await guildWarService.registerToReserveByDay(req.authUser.id, dayId);
+    const payload = registerPayloadSchema.parse(req.body);
+    const { dayId } = payload;
+    const registration = await guildWarService.registerToReserveByDay(req.authUser.id, dayId, toAvailability(payload));
     const io = getSocketServer();
     const roomId = `guildWar:week:${registration.week_id}`;
 
@@ -189,7 +243,7 @@ export const guildWarController = {
     assertAdmin(req);
 
     const body = adminRegisterSchema.parse(req.body);
-    const registration = await guildWarService.adminRegisterByDay(body.userId, body.dayId);
+    const registration = await guildWarService.adminRegisterByDay(body.userId, body.dayId, toAvailability(body));
 
     getSocketServer().to(`guildWar:week:${registration.week_id}`).emit("guildWar:registrationsUpdated", {
       weekId: registration.week_id,

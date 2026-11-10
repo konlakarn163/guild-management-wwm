@@ -5,6 +5,7 @@ export const guildWarRouter = Router();
 
 guildWarRouter.get("/windows/open", guildWarController.listOpen);
 guildWarRouter.get("/windows", guildWarController.listWindows);
+guildWarRouter.get("/teams/previous-assignments", guildWarController.getPreviousTeamAssignments);
 guildWarRouter.get("/windows/:id/details", guildWarController.getWindowDetails);
 guildWarRouter.post("/windows", guildWarController.createWindow);
 guildWarRouter.post("/windows/:id/open", guildWarController.openWindow);
@@ -19,5 +20,6 @@ guildWarRouter.get("/registrations/:weekId", guildWarController.listByWeek);
 guildWarRouter.post("/registrations", guildWarController.register);
 guildWarRouter.post("/registrations/reserve", guildWarController.registerToReserve);
 guildWarRouter.post("/registrations/admin", guildWarController.adminRegister);
+guildWarRouter.patch("/registrations/open/availability", guildWarController.updateAvailability);
 guildWarRouter.delete("/registrations/open", guildWarController.cancelOpen);
 guildWarRouter.delete("/registrations/:weekId", guildWarController.cancel);

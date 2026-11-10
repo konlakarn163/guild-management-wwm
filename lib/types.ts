@@ -42,6 +42,8 @@ export interface GuildWarRegistration {
   character_name?: string | null;
   build?: string | null;
   is_force?: boolean;
+  available_from?: string | null;
+  available_until?: string | null;
   users?: {
     username?: string;
     discord_id?: string;

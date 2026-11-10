@@ -8,7 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useConfirm } from "@/components/providers/confirm-provider";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Clock } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import {
+  DEFAULT_AVAILABLE_FROM,
+  DEFAULT_AVAILABLE_UNTIL,
+  formatTimeRange,
+  getTimelinePosition,
+  getTimelineTicks,
+  normalizeTime,
+} from "@/lib/war-time";
 import { getAccessToken } from "@/lib/client-auth";
 import type {
   BuildOption,
@@ -30,7 +39,13 @@ interface TeamMemberEntry {
   build: string;
   registrationIndex: number;
   isForce?: boolean;
+  availableFrom: string;
+  availableUntil: string;
 }
+
+type DetailsView = "teams" | "time";
+
+const TIMELINE_TICKS = getTimelineTicks();
 
 const getTeamType = (team?: GuildWarTeam | null): GuildWarTeamType => {
   if (team?.team_type === "atk" || team?.team_type === "def") {
@@ -112,9 +127,15 @@ function RegistrationGroup({
               key={`${title}-${member.key}`}
               className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/70 bg-slate-900/80 px-3 py-2"
             >
-              <span className="min-w-0 truncate text-sm font-semibold text-slate-100">
-                {title === "Pool" ? `${index + 1}. ` : ""}
-                {member.characterName}
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-semibold text-slate-100">
+                  {title === "Pool" ? `${index + 1}. ` : ""}
+                  {member.characterName}
+                </span>
+                <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                  <Clock className="h-3 w-3" />
+                  {formatTimeRange(member.availableFrom, member.availableUntil)}
+                </span>
               </span>
               <div className="flex items-center gap-2">
                 {member.isForce ? (
@@ -155,6 +176,7 @@ export function WarRegistrationManager() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedWindowDetails, setSelectedWindowDetails] = useState<GuildWarRegistrationWindowDetails | null>(null);
   const [buildOptions, setBuildOptions] = useState<BuildOption[]>([]);
+  const [detailsView, setDetailsView] = useState<DetailsView>("teams");
 
   const loadWindows = useCallback(async () => {
     try {
@@ -370,6 +392,8 @@ export function WarRegistrationManager() {
         build: registration.build ?? registration.users?.build ?? "-",
         registrationIndex: uniqueRegistrations.length + 1,
         isForce: Boolean(registration.is_force),
+        availableFrom: normalizeTime(registration.available_from, DEFAULT_AVAILABLE_FROM),
+        availableUntil: normalizeTime(registration.available_until, DEFAULT_AVAILABLE_UNTIL),
       };
 
       uniqueRegistrations.push(entry);
@@ -390,6 +414,8 @@ export function WarRegistrationManager() {
           build: "-",
           registrationIndex: Number.MAX_SAFE_INTEGER,
           isForce: false,
+          availableFrom: DEFAULT_AVAILABLE_FROM,
+          availableUntil: DEFAULT_AVAILABLE_UNTIL,
         };
         uniqueMembers.set(existing.key, existing);
       }
@@ -402,10 +428,27 @@ export function WarRegistrationManager() {
       .filter((member) => !assignedKeys.has(member.key))
       .sort((left, right) => left.registrationIndex - right.registrationIndex);
 
+    const teamNameByKey = new Map<string, string>();
+    for (const [teamName, members] of Object.entries(teams)) {
+      for (const member of members) {
+        teamNameByKey.set(member.key, teamName);
+      }
+    }
+
+    const byTime = [...uniqueRegistrations]
+      .sort(
+        (left, right) =>
+          left.availableFrom.localeCompare(right.availableFrom) ||
+          left.availableUntil.localeCompare(right.availableUntil) ||
+          left.registrationIndex - right.registrationIndex,
+      )
+      .map((member) => ({ member, teamName: teamNameByKey.get(member.key) ?? "Pool" }));
+
     return {
       pool,
       teams,
       teamMetaByName,
+      byTime,
       totalRegistrations: uniqueRegistrations.length,
     };
   }, [selectedWindowDetails]);
@@ -563,12 +606,129 @@ export function WarRegistrationManager() {
                   Week: {selectedWindowDetails.window.week_id} • Registrations: {groupedDetails.totalRegistrations}
                 </p>
               </div>
-              <Button type="button" variant="outline" className="rounded-xl" onClick={() => setIsDetailsOpen(false)}>
-                Close
-              </Button>
+              <div className="flex items-center gap-2">
+                <div role="radiogroup" aria-label="มุมมอง" className="grid grid-cols-2 gap-1 rounded-lg bg-slate-900/80 p-1">
+                  {(
+                    [
+                      { value: "teams", label: "ตามทีม" },
+                      { value: "time", label: "ตามเวลา" },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={detailsView === option.value}
+                      onClick={() => setDetailsView(option.value)}
+                      className={`h-8 rounded-md border px-3 text-sm font-semibold transition ${
+                        detailsView === option.value
+                          ? "border-amber-300/50 bg-amber-400/15 text-amber-100"
+                          : "border-transparent text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <Button type="button" variant="outline" className="rounded-xl" onClick={() => setIsDetailsOpen(false)}>
+                  Close
+                </Button>
+              </div>
             </div>
 
             <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-6 py-5">
+              {detailsView === "time" ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] border-collapse text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
+                        <th className="w-10 px-2 py-2">#</th>
+                        <th className="px-2 py-2">ชื่อ</th>
+                        <th className="px-2 py-2">เวลา</th>
+                        <th className="w-[40%] px-2 py-2">
+                          <div className="relative h-4">
+                            {TIMELINE_TICKS.map((tick, tickIndex) => (
+                              <span
+                                key={tick}
+                                className={`absolute text-[10px] font-medium normal-case tracking-normal ${
+                                  tickIndex === 0
+                                    ? ""
+                                    : tickIndex === TIMELINE_TICKS.length - 1
+                                      ? "-translate-x-full"
+                                      : "-translate-x-1/2"
+                                }`}
+                                style={{ left: `${getTimelinePosition(tick, tick).left}%` }}
+                              >
+                                {tick}
+                              </span>
+                            ))}
+                          </div>
+                        </th>
+                        <th className="px-2 py-2">ทีม</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupedDetails.byTime.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-2 py-6 text-center text-slate-400">
+                            No registrations
+                          </td>
+                        </tr>
+                      ) : (
+                        groupedDetails.byTime.map(({ member, teamName }, index) => {
+                          const bar = getTimelinePosition(member.availableFrom, member.availableUntil);
+                          const teamColor = groupedDetails.teamMetaByName[teamName]?.color;
+
+                          return (
+                            <tr key={member.key} className="border-t border-slate-800/80">
+                              <td className="px-2 py-2 text-slate-500">{index + 1}</td>
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-2 font-semibold text-slate-100">
+                                  {member.characterName}
+                                  {member.isForce ? (
+                                    <span className="rounded-full border border-amber-400/50 px-1.5 py-0.5 text-[10px] text-amber-200">
+                                      FORCE
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-xs" style={{ color: getBuildColor(member.build) }}>
+                                  {member.build}
+                                </div>
+                              </td>
+                              <td className="whitespace-nowrap px-2 py-2 font-mono text-slate-200">
+                                {formatTimeRange(member.availableFrom, member.availableUntil)}
+                              </td>
+                              <td className="px-2 py-2">
+                                <div className="relative h-3 rounded-full bg-slate-800/80">
+                                  {TIMELINE_TICKS.map((tick) => (
+                                    <span
+                                      key={tick}
+                                      className="absolute top-0 h-full w-px bg-slate-700/70"
+                                      style={{ left: `${getTimelinePosition(tick, tick).left}%` }}
+                                    />
+                                  ))}
+                                  <span
+                                    className="absolute top-0 h-full rounded-full bg-amber-400/80"
+                                    style={{ left: `${bar.left}%`, width: `${bar.width}%` }}
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-2 py-2">
+                                <span className="inline-flex items-center gap-1.5 text-slate-300">
+                                  {teamColor ? (
+                                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: teamColor }} />
+                                  ) : null}
+                                  {teamName}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
               <div className="grid gap-4">
                 <RegistrationGroup title="Pool" members={groupedDetails.pool} getBuildColor={getBuildColor} />
 
@@ -626,6 +786,7 @@ export function WarRegistrationManager() {
                   </div>
                 ) : null}
               </div>
+              )}
             </div>
           </div>
         </div>

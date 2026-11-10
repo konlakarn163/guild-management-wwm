@@ -168,6 +168,17 @@ alter table public.guild_war_registrations
 alter table public.guild_war_registrations
   alter column user_id drop not null;
 
+alter table public.guild_war_registrations
+  add column if not exists available_from time not null default '19:30',
+  add column if not exists available_until time not null default '22:00';
+
+alter table public.guild_war_registrations
+  drop constraint if exists guild_war_registrations_available_range_check;
+
+alter table public.guild_war_registrations
+  add constraint guild_war_registrations_available_range_check
+    check (available_from < available_until);
+
 alter table public.team_members
   add column if not exists day_id date,
   add column if not exists registration_id uuid references public.guild_war_registrations(id) on delete cascade;
