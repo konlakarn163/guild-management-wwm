@@ -47,34 +47,66 @@ export function DashboardShell() {
   const canUseCommandAnnouncements =
     profile?.role === "COMMAND" || profile?.role === "ADMIN" || isSuperAdmin;
 
+  const quickLinks = [
+    { id: "section-command", label: "Command", show: canUseCommandAnnouncements },
+    { id: "section-profile", label: "Profile", show: true },
+    { id: "section-registration", label: "ลงทะเบียนวอ", show: isActive },
+    { id: "section-teams", label: "จัดทีม", show: isActive },
+  ].filter((link) => link.show);
+
   return (
     <>
-      <ProfileCard />
-      {canUseCommandAnnouncements ? <CommandAnnouncementPanel /> : null}
-
-      {isLoadingProfile ? (
-        <div className="space-y-3">
-          <Skeleton className="h-5 w-56" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-        </div>
+      {quickLinks.length > 1 ? (
+        <nav aria-label="Dashboard sections" className="flex flex-wrap gap-1.5 lg:hidden">
+          {quickLinks.map((link) => (
+            <a
+              key={link.id}
+              href={`#${link.id}`}
+              className="rounded-full border border-slate-700/80 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-300 transition hover:border-amber-300/40 hover:text-amber-100"
+            >
+              {link.label}
+            </a>
+          ))}
+        </nav>
       ) : null}
 
       {profileError ? <p className="text-sm text-rose-300">{profileError}</p> : null}
 
-      {!isLoadingProfile && profile && !isActive ? (
-        <p className="rounded-xl border border-amber-300/25 bg-amber-900/20 px-4 py-3 text-sm text-amber-200">
-          Account is pending approval. You can edit profile now; other dashboard features unlock after admin approval.
-        </p>
+      {canUseCommandAnnouncements ? (
+        <div id="section-command" className="scroll-mt-24">
+          <CommandAnnouncementPanel />
+        </div>
       ) : null}
 
-   
+      <div className="flex flex-col gap-6">
+        <div id="section-profile" className="min-w-0 scroll-mt-24">
+          <ProfileCard />
+        </div>
+
+        {isActive ? (
+          <div id="section-registration" className="min-w-0 scroll-mt-24">
+            <WarRegistration canManageAll={Boolean(isSuperAdmin)} />
+          </div>
+        ) : null}
+
+        {!isLoadingProfile && profile && !isActive ? (
+          <p className="rounded-xl border border-amber-300/25 bg-amber-900/20 px-4 py-3 text-sm text-amber-200">
+            Account is pending approval. You can edit profile now; other dashboard features unlock after admin approval.
+          </p>
+        ) : null}
+      </div>
+
+      {isLoadingProfile ? (
+        <div className="space-y-3">
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
+        </div>
+      ) : null}
 
       {isActive ? (
-        <>
-          <WarRegistration canManageAll={Boolean(isSuperAdmin)} />
+        <div id="section-teams" className="scroll-mt-24">
           <TeamBuilder canDrag={Boolean(isSuperAdmin)} />
-          {/* {isAdmin ? <AdminApprovals /> : null} */}
-        </>
+        </div>
       ) : null}
     </>
   );

@@ -1,4 +1,9 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const API_PROXY_PREFIX = "/meawmeawmeawmeawmeaw";
+
+const resolveApiUrl = (path: string) => (
+  typeof window === "undefined" ? `${API_BASE_URL}${path}` : `${API_PROXY_PREFIX}${path}`
+);
 
 const BROWSER_GET_REUSE_MS = 3000;
 const browserGetCache = new Map<string, { expiresAt: number; promise: Promise<unknown> }>();
@@ -13,7 +18,7 @@ async function request<T>(path: string, options?: ApiFetchOptions): Promise<T> {
     headers.set("Authorization", `Bearer ${options.token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(resolveApiUrl(path), {
     ...options,
     headers,
     cache: options?.cache ?? (options?.next ? undefined : "no-store"),

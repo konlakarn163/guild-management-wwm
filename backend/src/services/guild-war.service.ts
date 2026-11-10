@@ -25,6 +25,14 @@ interface TeamRow {
   }>;
 }
 
+export interface Availability {
+  availableFrom: string;
+  availableUntil: string;
+}
+
+const REGISTRATION_COLUMNS =
+  "id, day_id, week_id, user_id, character_name, build, is_force, available_from, available_until";
+
 interface OpenWindowRegistrations {
   windows: RegistrationWindow[];
   registrationsByDay: Record<string, unknown[]>;
@@ -185,10 +193,27 @@ async function getUserProfileForRegistration(userId: string) {
   };
 }
 
-async function upsertRegistration(userId: string, dayId: string, weekId: string) {
+function toAvailabilityColumns(availability?: Availability) {
+  if (!availability) {
+    return {};
+  }
+
+  if (availability.availableFrom >= availability.availableUntil) {
+    throw new HttpError(400, "Available from must be earlier than available until");
+  }
+
+  return {
+    available_from: availability.availableFrom,
+    available_until: availability.availableUntil,
+  };
+}
+
+async function upsertRegistration(userId: string, dayId: string, weekId: string, availability?: Availability) {
+  const availabilityColumns = toAvailabilityColumns(availability);
+
   const { data: existingRegistration, error: existingRegistrationError } = await supabaseAdmin
     .from("guild_war_registrations")
-    .select("id, day_id, week_id, user_id, character_name, build, is_force")
+    .select(REGISTRATION_COLUMNS)
     .eq("user_id", userId)
     .eq("day_id", dayId)
     .maybeSingle();
@@ -198,7 +223,22 @@ async function upsertRegistration(userId: string, dayId: string, weekId: string)
   }
 
   if (existingRegistration) {
-    return existingRegistration;
+    if (!availability) {
+      return existingRegistration;
+    }
+
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from("guild_war_registrations")
+      .update(availabilityColumns)
+      .eq("id", existingRegistration.id)
+      .select(REGISTRATION_COLUMNS)
+      .single();
+
+    if (updateError) {
+      throw new HttpError(400, updateError.message);
+    }
+
+    return updated;
   }
 
   const profile = await getUserProfileForRegistration(userId);
@@ -212,8 +252,9 @@ async function upsertRegistration(userId: string, dayId: string, weekId: string)
       character_name: profile.character_name,
       build: profile.build,
       is_force: false,
+      ...availabilityColumns,
     })
-    .select("id, day_id, week_id, user_id, character_name, build, is_force")
+    .select(REGISTRATION_COLUMNS)
     .single();
 
   if (error) {
@@ -229,7 +270,7 @@ async function upsertForceRegistration(dayId: string, weekId: string, characterN
 
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("guild_war_registrations")
-    .select("id, day_id, week_id, user_id, character_name, build, is_force")
+    .select(REGISTRATION_COLUMNS)
     .eq("day_id", dayId)
     .eq("is_force", true)
     .ilike("character_name", normalizedCharacterName)
@@ -245,7 +286,7 @@ async function upsertForceRegistration(dayId: string, weekId: string, characterN
         .from("guild_war_registrations")
         .update({ build: normalizedBuild })
         .eq("id", existing.id)
-        .select("id, day_id, week_id, user_id, character_name, build, is_force")
+        .select(REGISTRATION_COLUMNS)
         .single();
 
       if (updateError) {
@@ -268,7 +309,7 @@ async function upsertForceRegistration(dayId: string, weekId: string, characterN
       build: normalizedBuild,
       is_force: true,
     })
-    .select("id, day_id, week_id, user_id, character_name, build, is_force")
+    .select(REGISTRATION_COLUMNS)
     .single();
 
   if (error) {
@@ -311,11 +352,83 @@ async function ensureReserveTeamId() {
   return reserveTeamId;
 }
 
+const RESERVE_TEAM_NAME = "Reserve";
+
 export const guildWarService = {
+  async getPreviousTeamAssignments(dayId: string) {
+    const { data: latest, error: latestError } = await supabaseAdmin
+      .from("team_members")
+      .select("day_id")
+      .lt("day_id", dayId)
+      .not("registration_id", "is", null)
+      .order("day_id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestError) {
+      throw new HttpError(500, latestError.message);
+    }
+
+    if (!latest?.day_id) {
+      return { previousDayId: null, assignments: [] };
+    }
+
+    const previousDayId = latest.day_id as string;
+
+    const [membersResult, registrationsResult, reserveResult] = await Promise.all([
+      supabaseAdmin
+        .from("team_members")
+        .select("team_id, registration_id")
+        .eq("day_id", previousDayId)
+        .not("registration_id", "is", null),
+      supabaseAdmin
+        .from("guild_war_registrations")
+        .select("id, user_id, character_name, is_force")
+        .eq("day_id", previousDayId),
+      supabaseAdmin.from("teams").select("id").eq("name", RESERVE_TEAM_NAME),
+    ]);
+
+    if (membersResult.error) {
+      throw new HttpError(500, membersResult.error.message);
+    }
+
+    if (registrationsResult.error) {
+      throw new HttpError(500, registrationsResult.error.message);
+    }
+
+    if (reserveResult.error) {
+      throw new HttpError(500, reserveResult.error.message);
+    }
+
+    const reserveTeamIds = new Set((reserveResult.data ?? []).map((team) => team.id as string));
+    const registrationById = new Map(
+      (registrationsResult.data ?? []).map((registration) => [registration.id as string, registration]),
+    );
+
+    const assignments = (membersResult.data ?? [])
+      .filter((member) => !reserveTeamIds.has(member.team_id as string))
+      .map((member) => {
+        const registration = registrationById.get(member.registration_id as string);
+        if (!registration) {
+          return null;
+        }
+
+        return {
+          teamId: member.team_id as string,
+          userId: (registration.user_id as string | null) ?? null,
+          characterName: (registration.character_name as string | null) ?? null,
+          isForce: Boolean(registration.is_force),
+        };
+      })
+      .filter((assignment): assignment is NonNullable<typeof assignment> => Boolean(assignment));
+
+    return { previousDayId, assignments };
+  },
+
   async listRegistrations(weekId: string) {
     const { data, error } = await supabaseAdmin
       .from("guild_war_registrations")
-      .select("id, day_id, week_id, user_id, character_name, build, is_force, users(username, discord_id, character_name, build)")
+      .select(`${REGISTRATION_COLUMNS}, users(username, discord_id, character_name, build)`)
       .eq("week_id", weekId)
       .order("created_at", { ascending: true });
 
@@ -329,7 +442,7 @@ export const guildWarService = {
   async listRegistrationsByDay(dayId: string) {
     const { data, error } = await supabaseAdmin
       .from("guild_war_registrations")
-      .select("id, day_id, week_id, user_id, character_name, build, is_force, users(username, discord_id, character_name, build)")
+      .select(`${REGISTRATION_COLUMNS}, users(username, discord_id, character_name, build)`)
       .eq("day_id", dayId)
       .order("created_at", { ascending: true });
 
@@ -617,13 +730,35 @@ export const guildWarService = {
     return upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
   },
 
-  async registerByDay(userId: string, dayId: string) {
+  async registerByDay(userId: string, dayId: string, availability?: Availability) {
     await assertActiveUser(userId);
 
     const openWindow = await getRequiredOpenWindowByDay(dayId);
     await clearTeamMembershipByDay(openWindow.day_id, userId);
 
-    return upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
+    return upsertRegistration(userId, openWindow.day_id, openWindow.week_id, availability);
+  },
+
+  async updateAvailabilityByDay(userId: string, dayId: string, availability: Availability) {
+    const openWindow = await getRequiredOpenWindowByDay(dayId);
+
+    const { data, error } = await supabaseAdmin
+      .from("guild_war_registrations")
+      .update(toAvailabilityColumns(availability))
+      .eq("user_id", userId)
+      .eq("day_id", openWindow.day_id)
+      .select(REGISTRATION_COLUMNS)
+      .maybeSingle();
+
+    if (error) {
+      throw new HttpError(400, error.message);
+    }
+
+    if (!data) {
+      throw new HttpError(404, "Registration not found");
+    }
+
+    return data;
   },
 
   async registerToReserve(userId: string) {
@@ -652,11 +787,11 @@ export const guildWarService = {
     return registration;
   },
 
-  async registerToReserveByDay(userId: string, dayId: string) {
+  async registerToReserveByDay(userId: string, dayId: string, availability?: Availability) {
     await assertActiveUser(userId);
 
     const openWindow = await getRequiredOpenWindowByDay(dayId);
-    const registration = await upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
+    const registration = await upsertRegistration(userId, openWindow.day_id, openWindow.week_id, availability);
     const reserveTeamId = await ensureReserveTeamId();
 
     await clearTeamMembershipByDay(openWindow.day_id, userId);
@@ -686,13 +821,13 @@ export const guildWarService = {
     return upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
   },
 
-  async adminRegisterByDay(userId: string, dayId: string) {
+  async adminRegisterByDay(userId: string, dayId: string, availability?: Availability) {
     await assertActiveUser(userId);
 
     const openWindow = await getRequiredOpenWindowByDay(dayId);
     await clearTeamMembershipByDay(openWindow.day_id, userId);
 
-    return upsertRegistration(userId, openWindow.day_id, openWindow.week_id);
+    return upsertRegistration(userId, openWindow.day_id, openWindow.week_id, availability);
   },
 
   async autoRegisterOnWindowOpen(dayId: string, weekId: string) {

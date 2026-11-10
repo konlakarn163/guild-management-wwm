@@ -484,12 +484,12 @@ export function CommandAnnouncementPanel() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="command-config-title"
-            className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-md border border-amber-100/15 bg-[#07101c] shadow-2xl"
+            className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-md border border-amber-100/15 bg-[#07101c] shadow-2xl"
           >
             <header className="flex items-center justify-between gap-4 border-b border-amber-100/10 px-4 py-3 sm:px-6">
-              <div>
+              <div className="flex items-baseline gap-3">
                 <h3 id="command-config-title" className="text-lg font-semibold text-white">Config msg</h3>
-
+                <span className="text-xs text-slate-400">{draftMessages.length} รายการ</span>
               </div>
               <button
                 type="button"
@@ -501,8 +501,8 @@ export function CommandAnnouncementPanel() {
               </button>
             </header>
 
-            <div className="overflow-auto px-4 py-3 sm:px-6">
-              <div className="grid gap-4 border-b border-slate-800 pb-4 sm:grid-cols-2">
+            <div className="overflow-y-auto px-4 py-4 sm:px-6">
+              <div className="grid gap-4 rounded-md border border-slate-800 bg-slate-950/40 p-4 md:grid-cols-2">
                 <div>
                   <label htmlFor="minutes-to-seconds" className="mb-2 block text-xs font-medium text-slate-300">
                     แปลงนาที.วินาทีเป็นวินาที
@@ -573,25 +573,27 @@ export function CommandAnnouncementPanel() {
                 </div>
               </div>
 
-              <div className="mt-2">
+              <div className="mt-4">
+                {draftMessages.length > 0 ? (
+                  <div className="hidden grid-cols-[13rem_minmax(0,1fr)_2.25rem] gap-3 px-1 pb-2 text-xs font-medium text-slate-400 sm:grid">
+                    <span>เวลาเหลือ</span>
+                    <span>ข้อความประกาศ</span>
+                    <span className="sr-only">ลบ</span>
+                  </div>
+                ) : null}
                 {draftMessages.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-400">ยังไม่มีเวลาแจ้งเตือน</p>
                 ) : draftMessages.map((draft) => (
                   <div
                     key={draft.id}
-                    className="min-w-[44rem] gap-3 border-b border-slate-800/90 py-3"
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-                    }}
+                    className="grid grid-cols-[minmax(0,1fr)_2.25rem] items-start gap-x-3 gap-y-2 border-t border-slate-800/90 px-1 py-3 sm:grid-cols-[13rem_minmax(0,1fr)_2.25rem]"
                   >
-                    <div style={{ gridColumn: "span 3 / span 3" }}>
-                      <div className="flex flex-col w-full flex-1 items-start" >
-
-                        <span className="text-xs text-slate-400">เวลาเหลือ</span>
+                    <div className="min-w-0">
+                      <div className="flex w-full flex-col">
+                        <span className="text-xs text-slate-400 sm:sr-only">เวลาเหลือ</span>
                         {editingTime?.id === draft.id ? (
                           <>
-                            <div className="mt-1 flex items-center gap-1">
+                            <div className="mt-1 flex items-center gap-1 sm:mt-0">
                               <input
                                 type="number"
                                 min="1"
@@ -604,7 +606,7 @@ export function CommandAnnouncementPanel() {
                                   if (event.key === "Enter") saveEditedTime();
                                   if (event.key === "Escape") setEditingTime(null);
                                 }}
-                                className="h-10  flex-1 rounded border border-slate-700 bg-slate-950 px-3 font-mono text-amber-200 outline-none focus:border-amber-300"
+                                className="h-10 min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-3 font-mono text-amber-200 outline-none focus:border-amber-300"
                               />
                               <button
                                 type="button"
@@ -630,7 +632,7 @@ export function CommandAnnouncementPanel() {
                             </span>
                           </>
                         ) : (
-                          <div className="mt-1 flex min-h-10 items-center justify-between gap-2 rounded border border-slate-700 bg-slate-950 px-3">
+                          <div className="mt-1 flex min-h-10 items-center sm:mt-0 justify-between gap-2 rounded border border-slate-700 bg-slate-950 px-3">
                             <span className="text-sm text-amber-200">{formatDurationLabel(draft.seconds)}</span>
                             <button
                               type="button"
@@ -645,8 +647,8 @@ export function CommandAnnouncementPanel() {
                         )}
                       </div>
                     </div>
-                    <label className="text-xs text-slate-400 flex flex-col items-start" style={{ gridColumn: "span 8 / span 8" }}>
-                      <span className="text-xs text-slate-400">ข้อความประกาศ</span>
+                    <label className="col-span-2 row-start-2 flex min-w-0 flex-col text-xs text-slate-400 sm:col-span-1 sm:col-start-2 sm:row-start-1">
+                      <span className="text-xs text-slate-400 sm:sr-only">ข้อความประกาศ</span>
                       <textarea
                         aria-label={`ข้อความเมื่อเหลือ ${draft.seconds} วินาที`}
                         rows={2}
@@ -655,10 +657,10 @@ export function CommandAnnouncementPanel() {
                         onChange={(event) => setDraftMessages((current) => current.map((item) => (
                           item.id === draft.id ? { ...item, msg: event.target.value } : item
                         )))}
-                        className="mt-1 w-full h-[40px] w-full resize-y rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-amber-300 focus:ring-1 focus:ring-amber-300"
+                        className="mt-1 min-h-10 w-full resize-y rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-300 focus:ring-1 focus:ring-amber-300 sm:mt-0"
                       />
                     </label>
-                    <div style={{ gridColumn: "span 1 / span 1" }} className="flex justify-end items-center">
+                    <div className="col-start-2 row-start-1 flex justify-end pt-5 sm:col-start-3 sm:pt-0.5">
                       <button
                         type="button"
                         title="ลบเวลาแจ้งเตือน"
@@ -667,8 +669,7 @@ export function CommandAnnouncementPanel() {
                           setDraftMessages((current) => current.filter((item) => item.id !== draft.id));
                           if (editingTime?.id === draft.id) setEditingTime(null);
                         }}
-                        className="mt-5 inline-flex h-9 w-9 items-center justify-center justify-self-end rounded border border-rose-500/30 text-rose-300 hover:bg-rose-950/40"
-
+                        className="inline-flex h-9 w-9 items-center justify-center rounded border border-rose-500/30 text-rose-300 hover:bg-rose-950/40"
                       >
                         <Trash2 size={15} aria-hidden="true" />
                       </button>

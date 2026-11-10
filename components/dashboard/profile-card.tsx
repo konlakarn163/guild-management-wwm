@@ -136,18 +136,12 @@ export function ProfileCard() {
         title="Profile"
         subtitle="Character Name / Build จะถูกใช้ในการจัดทีม Guild War และต้องอัปเดตให้ตรงกับในเกม"
       >
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-11 w-full rounded-xl" />
-            <Skeleton className="h-3 w-44" />
-          </div>
-          <div className="space-y-2">
+        <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2.5">
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <div className="flex-1 space-y-1.5">
             <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-11 w-full rounded-xl" />
+            <Skeleton className="h-3 w-20" />
           </div>
-          <Skeleton className="h-24 w-full rounded-xl md:col-span-2" />
-          <Skeleton className="h-11 w-full rounded-xl md:col-span-2" />
         </div>
       </SectionCard>
     );
@@ -160,35 +154,39 @@ export function ProfileCard() {
       subtitle="Character Name / Build จะถูกใช้ในการจัดทีม Guild War และต้องอัปเดตให้ตรงกับในเกม"
     >
       {!showForm ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-sm text-slate-300">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-amber-300/25 bg-amber-300/10">
-              <CatFace mood={profileStatus === "ACTIVE" ? "success" : "warning"} className="h-9 w-9" />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2 text-sm text-slate-300">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-300/25 bg-amber-300/10">
+              <CatFace mood={profileStatus === "ACTIVE" ? "success" : "warning"} className="h-6 w-6" />
             </span>
-            <div>
-            <p>
-              <span className="font-semibold text-slate-100">Character:</span> {characterName || "-"}
-            </p>
-            <p className="mt-1">
-              <span className="font-semibold text-slate-100">Build:</span>{" "}
-              {build ? (
-                <span className="inline-flex items-center gap-1">
+            <div className="min-w-0 flex-1">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="truncate font-semibold text-slate-100">{characterName || "-"}</span>
+                {build ? (
                   <span
-                    className="inline-block h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: selectedBuildOption?.color ?? "#94a3b8" }}
-                  />
-                  {build}
-                </span>
-              ) : (
-                "-"
-              )}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">Status: {statusText}</p>
+                    className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-semibold"
+                    style={{
+                      borderColor: `${selectedBuildOption?.color ?? "#94a3b8"}66`,
+                      color: selectedBuildOption?.color ?? "#94a3b8",
+                      backgroundColor: `${selectedBuildOption?.color ?? "#94a3b8"}1A`,
+                    }}
+                  >
+                    <span
+                      className="inline-block h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: selectedBuildOption?.color ?? "#94a3b8" }}
+                    />
+                    {build}
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-500">ยังไม่ได้เลือก Build</span>
+                )}
+              </p>
+              <p className="text-xs text-slate-400">Status: {statusText}</p>
             </div>
+            <Button type="button" variant="outline" size="sm" className="rounded-lg" onClick={() => setIsEditMode(true)}>
+              แก้ไข Profile
+            </Button>
           </div>
-          <Button type="button" className="h-11 rounded-xl" onClick={() => setIsEditMode(true)}>
-            แก้ไข Profile
-          </Button>
           {message ? (
             <p
               className={`rounded-lg px-3 py-2 text-sm ${
@@ -204,11 +202,11 @@ export function ProfileCard() {
       ) : null}
 
       {showForm ? (
-      <form className="grid gap-4 md:grid-cols-2">
-        <label className="space-y-2">
+      <form className="grid gap-3">
+        <label className="space-y-1">
           <span className="text-sm font-medium text-slate-300">Character Name</span>
           <Input
-            className="h-11 rounded-xl"
+            className="h-9 rounded-lg"
             placeholder="AeronWind"
             value={characterName}
             onChange={(event) => setCharacterName(event.target.value)}
@@ -226,10 +224,10 @@ export function ProfileCard() {
            
           </span>
           {isLoadingBuildOptions ? (
-            <Skeleton className="h-11 w-full rounded-xl" />
+            <Skeleton className="h-9 w-full rounded-lg" />
           ) : (
             <Select value={build || undefined} onValueChange={setBuild} disabled={isFormDisabled}>
-              <SelectTrigger className="h-11 rounded-xl">
+              <SelectTrigger className="h-9 rounded-lg">
                 <SelectValue placeholder="Select build / weapon" />
               </SelectTrigger>
               <SelectContent>
@@ -248,7 +246,7 @@ export function ProfileCard() {
          
         </label>
 
-        <div className="md:col-span-2 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-xs text-slate-300">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-xs text-slate-300">
           <p className="font-medium text-slate-200">ข้อมูลที่ใช้จัดทีม Guild War</p>
           <p className="mt-1 text-slate-400">
             Character Name และ Build / Weapon จะถูกใช้ในหน้า Team Builder และ War Registration เพื่อจัดทีมอัตโนมัติ
@@ -269,7 +267,7 @@ export function ProfileCard() {
         <Button
           type="button"
           onClick={() => void onSave()}
-          className="md:col-span-2 h-11 rounded-xl"
+          className="h-9 rounded-lg"
           disabled={isFormDisabled}
         >
           {isFormDisabled ? "Waiting for Admin Approval" : "Save Profile"}
@@ -280,7 +278,7 @@ export function ProfileCard() {
             type="button"
             variant="outline"
             onClick={() => setIsEditMode(false)}
-            className="md:col-span-2 h-11 rounded-xl"
+            className="h-9 rounded-lg"
           >
             ยกเลิกการแก้ไข
           </Button>
@@ -288,7 +286,7 @@ export function ProfileCard() {
 
         {message ? (
           <p
-            className={`md:col-span-2 rounded-lg px-3 py-2 text-sm ${
+            className={`rounded-lg px-3 py-2 text-sm ${
               messageType === "success"
                 ? "border border-emerald-500/30 bg-emerald-900/20 text-emerald-300"
                 : "border border-rose-500/30 bg-rose-900/20 text-rose-300"
